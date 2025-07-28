@@ -2,7 +2,7 @@
 :root {
     --brand-purple-deep: #8e44ad;
     --brand-purple-mid: #9b59b6;
-    --brand-purple-light: #c4a7e7;
+    /* --brand-purple-light: #c4a7e7;  <-- 不再需要這個變數 */
     --brand-pink: #E507C8;
     --text-dark: #333;
     --text-black: #000;
@@ -16,13 +16,14 @@ body, html {
     padding: 0;
     width: 100%;
     min-height: 100%;
-    /* 【Agent 建議】明確指定 Noto Sans TC 為主要字體 */
     font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     color: var(--text-dark);
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    background-color: var(--brand-purple-light); 
+    
+    /* 【最終修正】將備用底色從紫色改為白色，解決透明區域透色問題 */
+    background-color: #fff; 
 }
 
 body::before {
@@ -39,7 +40,7 @@ body::before {
     background-repeat: no-repeat;
 }
 
-/* ... 其他樣式保持不變 ... */
+/* ... 後續所有樣式都和上一版相同，保持不變 ... */
 
 .container {
     width: 90%;

@@ -136,19 +136,30 @@ select.form-input {
     margin-top: 40px;
 }
 
+/* ==================== (請用這段新的取代舊的) 表單按鈕統一樣式 ==================== */
+
 .form-button {
-    background-image: url('btn-bg.png');
+    /* 背景圖設定 */
+    background-image: url('btn-bg.jpg');
     background-size: cover;
     background-position: center;
-    background-color: transparent;
-    color: #4A3A5E;
-    text-shadow: 1px 1px 2px rgba(255,255,255,0.7);
+    background-color: transparent; /* 移除底色，才能看到背景圖 */
+
+    /* 字體樣式 (完全按照您的最新要求) */
+    color: rgba(139, 112, 147, 0.88);
+    text-shadow: 1px 2px 3px rgba(98, 76, 126, 0.60);
+    font-family: "Noto Sans TC", sans-serif;
+    font-size: 25px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: normal; /* 讓文字垂直置中 */
+    letter-spacing: 2.5px;
+    
+    /* 按鈕基本樣式 */
     border: none;
     border-radius: 30px;
     padding: 12px 0;
     width: 45%;
-    font-size: 18px;
-    font-weight: bold;
     cursor: pointer;
     box-shadow: 2px 2px 5px rgba(0,0,0,0.1), -2px -2px 5px rgba(255,255,255,0.7);
     transition: all 0.2s ease-in-out;
@@ -159,9 +170,9 @@ select.form-input {
     transform: scale(1.02);
 }
 
-.form-button.submit {
-    /* 不需特殊樣式，與一般按鈕相同 */
-}
+/* 原本的 .form-button.submit 已經不需要了，
+   因為所有 .form-button 都長得一樣，所以可以直接刪除。
+*/
 
 /* 電腦版提示訊息樣式 */
 #desktop-warning {

@@ -1,9 +1,7 @@
-// 【Agent 建議】使用 IIFE (立即執行函式) 包裹程式碼，避免污染全域變數
 (function() {
-    // 當整個網頁的 DOM 結構都載入完成後，再執行我們的程式碼
     document.addEventListener("DOMContentLoaded", function() {
 
-        // 宣告所有會用到的 HTML 元素
+        // --- DOM Elements ---
         const welcomeScreen = document.getElementById('welcome-screen');
         const bookingScreen = document.getElementById('booking-screen');
         const agreeButton = document.getElementById('agreeButton');
@@ -14,7 +12,7 @@
 
         const liffId = "2007825302-BWYw4PK5"; // 您的 LIFF ID
 
-        // 主程式進入點
+        // --- Main Logic ---
         main();
 
         async function main() {
@@ -37,8 +35,6 @@
         function setupEventListeners() {
             agreeButton.addEventListener('click', () => {
                 if (!liff.isLoggedIn()) {
-                    // **【最終修正】**
-                    // 移除 redirectUri 參數，恢復到我們之前能成功運作的版本
                     liff.login();
                 } else {
                     showBookingScreen();
@@ -47,7 +43,12 @@
 
             bookingForm.addEventListener('submit', function(event) {
                 event.preventDefault(); 
-                alert("預約請求已送出！（此為前端測試訊息）");
+                
+                // 找出所有被選取的按鈕
+                const selectedButtons = serviceOptions.querySelectorAll('.service-button.selected');
+                const selectedServices = Array.from(selectedButtons).map(button => button.textContent);
+
+                alert("您選擇的服務是：" + selectedServices.join(', ') + "。（此為前端測試訊息）");
                 // TODO: 呼叫後端 API
             });
         }
@@ -85,23 +86,40 @@
 
         async function loadServices() {
             try {
-                await new Promise(resolve => setTimeout(resolve, 1000)); 
+                // TODO: 未來這裡會換成真實的 API 呼叫
+                // --- 使用您提供的價目表作為模擬資料 ---
+                await new Promise(resolve => setTimeout(resolve, 500)); // 模擬網路延遲
                 const services = [
-                    { id: 'cut', name: '精緻剪髮', price: 1000 },
-                    { id: 'perm', name: '日系燙髮', price: 2500 },
-                    { id: 'color', name: '質感染髮', price: 2800 },
+                    { id: 'wash-basic', name: '基礎洗髮' },
+                    { id: 'spa-scalp', name: '頭皮SPA' },
+                    { id: 'wash-oil', name: '精油洗' },
+                    { id: 'cut', name: '剪髮' },
+                    { id: 'hair-care', name: '護髮' },
+                    { id: 'perm', name: '燙髮' },
+                    { id: 'perm-cold', name: '日系冷塑燙' },
+                    { id: 'perm-hot', name: '日系光感熱塑燙' },
+                    { id: 'perm-ion', name: '日系光感離子燙' },
+                    { id: 'dye', name: '染髮' },
                 ];
-                
+                // --- 模擬資料結束 ---
+
                 serviceOptions.innerHTML = ''; 
                 
+                // **【新功能核心】**
+                // 將服務項目，一個個做成「按鈕」加到畫面上
                 services.forEach(service => {
-                    const div = document.createElement('div');
-                    div.className = 'service-item';
-                    div.innerHTML = `
-                        <input type="checkbox" id="service-${service.id}" name="services" value="${service.id}">
-                        <label for="service-${service.id}">${service.name} ($${service.price})</label>
-                    `;
-                    serviceOptions.appendChild(div);
+                    const button = document.createElement('button');
+                    button.type = 'button'; // 確保按鈕不會觸發 form 提交
+                    button.className = 'service-button';
+                    button.textContent = service.name; // 只顯示名稱
+                    button.dataset.serviceId = service.id; // 將 id 存在 data-* 屬性中
+
+                    // 為每個按鈕加上點擊事件，用來切換「選取」狀態
+                    button.addEventListener('click', () => {
+                        button.classList.toggle('selected');
+                    });
+
+                    serviceOptions.appendChild(button);
                 });
 
             } catch (err) {

@@ -9,7 +9,15 @@ body, html {
     display: flex;
     justify-content: center;
     align-items: center;
-    background: linear-gradient(160deg, #d9abff, #b388eb, #8e44ad); /* 紫色漸層背景 */
+    
+    background-image: url('background.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    background-color: #c4a7e7; /* 備用底色 */
+
+    /* 【最終修正】移除 fixed 屬性，改為預設的 scroll，以修復 iOS 上的問題 */
+    background-attachment: scroll; 
 }
 
 /* 主要容器 */
@@ -20,9 +28,9 @@ body, html {
     box-sizing: border-box;
 }
 
-/* 歡迎說明的白色框框 */
-.welcome-box {
-    background-color: rgba(255, 255, 255, 0.9); /* 半透明白色 */
+/* 內容的半透明白色底框 */
+.content-box {
+    background-color: rgba(255, 255, 255, 0.85);
     padding: 30px;
     border-radius: 15px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.1);
@@ -30,7 +38,7 @@ body, html {
 }
 
 h1 {
-    color: #8e44ad; /* 深紫色標題 */
+    color: #8e44ad;
     margin-bottom: 20px;
 }
 
@@ -42,11 +50,11 @@ p {
 
 /* 主要按鈕樣式 */
 .cta-button {
-    background-color: #9b59b6; /* 中間色調的紫色 */
+    background-color: #9b59b6;
     color: white;
     border: none;
     padding: 15px 30px;
-    border-radius: 50px; /* 圓角 */
+    border-radius: 50px;
     font-size: 18px;
     font-weight: bold;
     cursor: pointer;
@@ -55,12 +63,11 @@ p {
 }
 
 .cta-button:hover {
-    background-color: #8e44ad; /* 深一點的紫色 */
-    transform: translateY(-2px); /* 輕微上浮效果 */
+    background-color: #8e44ad;
+    transform: translateY(-2px);
 }
 /* ==================== 預約表單畫面樣式 ==================== */
 
-/* "預約服務" 大標題 */
 .booking-title {
     color: #E507C8;
     text-align: center;
@@ -74,66 +81,72 @@ p {
     margin-bottom: 20px;
 }
 
-/* Hi xxx，歡迎... 的文字 */
 .welcome-text {
     text-align: center;
     color: #333;
     margin-bottom: 30px;
 }
 
-/* 表單每一橫列的容器 */
 .form-row {
     display: flex;
     align-items: center;
     margin-bottom: 25px;
 }
 
-/* "選擇日期：" 等標籤文字 */
 .form-label {
     color: #000;
     font-family: "Noto Sans TC", sans-serif;
     font-size: 16px;
     font-weight: 400;
     letter-spacing: 4px;
-    width: 100px; /* 固定寬度讓標籤對齊 */
-    flex-shrink: 0; /* 防止標籤被壓縮 */
+    width: 100px; 
+    flex-shrink: 0;
 }
 
-/* 所有輸入框的統一樣式 */
 .form-input {
-    flex-grow: 1; /* 讓輸入框填滿剩餘空間 */
+    flex-grow: 1;
     background-color: rgba(255, 255, 255, 0.40);
     box-shadow: -5px 5px 5px 0px #ffffff inset, 5px -5px 5px 0px rgba(224, 178, 146, 0.25) inset;
-    border: 1px solid rgba(255, 255, 255, 0.5); /* 加一個細邊框更有質感 */
-    border-radius: 25px; /* 圓角 */
+    border: 1px solid rgba(255, 255, 255, 0.5); 
+    border-radius: 25px;
     padding: 12px 15px;
     font-size: 16px;
     color: #333;
-    height: 48px; /* 固定高度 */
-    box-sizing: border-box; /* 確保 padding 不會影響總寬高 */
+    height: 48px; 
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
 }
 
-/* 針對選擇項目的框框微調 */
+select.form-input {
+    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236A4C95%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+    background-repeat: no-repeat;
+    background-position: right 15px center;
+    background-size: 12px;
+}
 .service-selection-box {
-    min-height: 80px; /* 給予多一點高度 */
+    min-height: 80px;
     padding-top: 10px;
 }
 
-/* 按鈕群組 */
 .button-group {
     display: flex;
-    justify-content: space-around; /* 讓按鈕平均分佈 */
+    justify-content: space-around;
     margin-top: 40px;
 }
 
-/* 表單按鈕統一樣式 */
 .form-button {
-    background: #F0E8F3;
-    color: #6A4C95;
+    background-image: url('btn-bg.png');
+    background-size: cover;
+    background-position: center;
+    background-color: transparent;
+    color: #4A3A5E;
+    text-shadow: 1px 1px 2px rgba(255,255,255,0.7);
     border: none;
     border-radius: 30px;
     padding: 12px 0;
-    width: 45%; /* 每個按鈕佔約 45% 寬度 */
+    width: 45%;
     font-size: 18px;
     font-weight: bold;
     cursor: pointer;
@@ -143,8 +156,34 @@ p {
 
 .form-button:hover {
     box-shadow: 4px 4px 8px rgba(0,0,0,0.15), -4px -4px 8px rgba(255,255,255,0.9);
+    transform: scale(1.02);
 }
 
 .form-button.submit {
-    background: #D5B8E8; /* 送出按鈕用深一點的顏色 */
+    /* 不需特殊樣式，與一般按鈕相同 */
+}
+
+/* 電腦版提示訊息樣式 */
+#desktop-warning {
+    display: none;
+    color: white;
+    background-color: rgba(0,0,0,0.7);
+    padding: 30px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 18px;
+}
+
+/* Media Query，當螢幕寬度大於 768px 時觸發 */
+@media (min-width: 768px) {
+    #main-content {
+        display: none;
+    }
+    #desktop-warning {
+        display: block;
+    }
+    /* 【最終修正】只在電腦版才開啟 fixed 讓它有視差效果 */
+    body, html {
+        background-attachment: fixed;
+    }
 }

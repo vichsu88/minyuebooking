@@ -11,11 +11,10 @@ document.addEventListener("DOMContentLoaded", function() {
     liff.init({ liffId: '2007825302-BWYw4PK5' })
         .then(() => {
             console.log("LIFF Initialization succeeded.");
-            if (liff.isLoggedIn()) {
-                showBookingScreen();
-            } else {
-                agreeButton.disabled = false;
-            }
+            // **【流程修正】**
+            // 初始化成功後，我們不再檢查登入狀態，
+            // 直接啟用「同意」按鈕，讓歡迎畫面成為固定的第一站。
+            agreeButton.disabled = false;
         })
         .catch((err) => {
             console.error("LIFF Initialization failed.", err);
@@ -27,45 +26,60 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // 2. 為「同意」按鈕加上點擊事件
     agreeButton.addEventListener('click', function() {
-        // 我們移除 redirectUri 參數，讓 LIFF SDK 自動處理，避免網址不一致問題
-        liff.login(); 
+        // 檢查是否已登入
+        if (!liff.isLoggedIn()) {
+            // 如果沒登入，就引導去登入。登入後會跳轉回來，並重新執行一次這整段 JS。
+            // 屆時 isLoggedIn() 就會是 true。
+            liff.login();
+        } else {
+            // 如果已經登入了，就直接執行下一步：取得資料並切換畫面
+            showBookingScreen();
+        }
     });
 
-    // 3. 定義「取得資料並切換畫面」的函式 (整合 Agent 建議的最終版)
+    // 3. 定義「取得資料並切換畫面」的函式
     function showBookingScreen() {
-        let userName = '顧客'; // 預設名字
-
-        // **【新流程核心】**
-        // 先用 liff.isInClient() 判斷是不是在 LINE App 內部
-        if (liff.isInClient()) {
-            // **情況一：在 LINE App 內部**
-            // 我們可以安全地呼叫 liff.getProfile()
-            liff.getProfile()
-                .then(profile => {
-                    userName = profile.displayName;
-                    displayNameSpan.textContent = userName;
-                    switchToBookingView();
-                })
-                .catch((err) => {
-                    console.error("Failed to get profile.", err);
-                    alert("無法取得您的 LINE 資料，請確認授權後再試。");
-                });
-        } else {
-            // **情況二：在外部瀏覽器 (電腦 Chrome, 手機 Safari 等)**
-            // 我們不能用 getProfile()，但可以退而求其次，用 getDecodedIDToken()
-            // 它一樣能拿到客人的名字，而且在外部瀏覽器中也能運作
-            const idToken = liff.getDecodedIDToken();
-            if (idToken && idToken.name) {
-                userName = idToken.name; // 從 ID Token 中取得名字
-            }
-            displayNameSpan.textContent = userName;
-            switchToBookingView();
-        }
+        // **【名字顯示修正】**
+        // 我們先取得使用者名字，在成功取得後，才執行畫面切換。
+        getUserProfile()
+            .then(userName => {
+                // 成功拿到名字後...
+                // 1. 把名字填上去
+                displayNameSpan.textContent = userName;
+                // 2. 再切換畫面
+                welcomeScreen.style.display = 'none';
+                bookingScreen.style.display = 'block';
+            })
+            .catch(err => {
+                // 如果拿不到名字，就報錯
+                console.error('Error getting user profile:', err);
+                alert('無法取得您的 LINE 資料，請稍後再試。');
+            });
     }
 
-    // 將畫面切換的動作獨立成一個函式，方便共用
-    function switchToBookingView() {
-        welcomeScreen.style.display = 'none';
-        bookingScreen.style.display = 'block';
+    // 4. 將取得使用者名稱的邏輯，獨立成一個新的函式，讓程式碼更清晰
+    function getUserProfile() {
+        // 這個函式會回傳一個 Promise，裡面包含了使用者的名字
+        return new Promise((resolve, reject) => {
+            if (liff.isInClient()) {
+                // 在 LINE App 內部，使用 getProfile
+                liff.getProfile()
+                    .then(profile => {
+                        resolve(profile.displayName); // 成功時，回傳名字
+                    })
+                    .catch(err => {
+                        reject(err); // 失敗時，回絕
+                    });
+            } else {
+                // 在外部瀏覽器，使用 getDecodedIDToken
+                const idToken = liff.getDecodedIDToken();
+                if (idToken && idToken.name) {
+                    resolve(idToken.name); // 成功時，回傳名字
+                } else {
+                    // 如果連 ID Token 都沒有，就回傳一個預設名字
+                    resolve('顧客'); 
+                }
+            }
+        });
     }
 });

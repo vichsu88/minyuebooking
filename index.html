@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>茗月髮型設計 - 預約服務</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="welcome-screen" class="container">
+        <div class="content-box">
+            <h1>預約流程說明</h1>
+            <p>
+                為了提供您最專屬的服務，我們的預約將採兩階段確認。
+                請您先選擇期望的日期與時段，送出請求後，我們將會透過 LINE 官方帳號與您確認最終的預約時間。
+            </p>
+            <button id="agreeButton" class="cta-button">我了解，開始預約</button>
+        </div>
+    </div>
+    <div id="booking-screen" class="container" style="display: none;">
+        
+        <h1 class="booking-title">預約服務</h1>
+        
+        <p class="welcome-text">Hi <span id="displayName"></span>，請填寫預約資訊：</p>
+        
+        <form id="booking-form">
+            <div class="form-row">
+                <label class="form-label" for="date-picker">選擇日期：</label>
+                <input type="date" id="date-picker" name="date" class="form-input">
+            </div>
+            <div class="form-row">
+                <label class="form-label" for="time-slot">選擇時段：</label>
+                <input type="text" id="time-slot" name="time" class="form-input" placeholder="例如：下午2點">
+            </div>
+            <div class="form-row">
+                <label class="form-label">預約項目：</label>
+                <div id="service-options" class="form-input service-selection-box">
+                    <small>(服務項目載入中...)</small>
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button type="button" class="form-button">價目表</button>
+                <button type="submit" class="form-button submit">送出預約</button>
+            </div>
+        </form>
+    </div>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>

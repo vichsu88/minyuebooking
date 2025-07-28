@@ -1,0 +1,150 @@
+/* 基本樣式重設與字體設定 */
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: linear-gradient(160deg, #d9abff, #b388eb, #8e44ad); /* 紫色漸層背景 */
+}
+
+/* 主要容器 */
+.container {
+    width: 90%;
+    max-width: 400px;
+    padding: 20px;
+    box-sizing: border-box;
+}
+
+/* 歡迎說明的白色框框 */
+.welcome-box {
+    background-color: rgba(255, 255, 255, 0.9); /* 半透明白色 */
+    padding: 30px;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    text-align: center;
+}
+
+h1 {
+    color: #8e44ad; /* 深紫色標題 */
+    margin-bottom: 20px;
+}
+
+p {
+    line-height: 1.6;
+    margin-bottom: 30px;
+    text-align: left;
+}
+
+/* 主要按鈕樣式 */
+.cta-button {
+    background-color: #9b59b6; /* 中間色調的紫色 */
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    border-radius: 50px; /* 圓角 */
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s, transform 0.2s;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.cta-button:hover {
+    background-color: #8e44ad; /* 深一點的紫色 */
+    transform: translateY(-2px); /* 輕微上浮效果 */
+}
+/* ==================== 預約表單畫面樣式 ==================== */
+
+/* "預約服務" 大標題 */
+.booking-title {
+    color: #E507C8;
+    text-align: center;
+    text-shadow: 1px 4px 4px rgba(98, 76, 126, 0.40);
+    font-family: "Noto Sans TC", sans-serif;
+    font-size: 40px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: normal;
+    letter-spacing: 10px;
+    margin-bottom: 20px;
+}
+
+/* Hi xxx，歡迎... 的文字 */
+.welcome-text {
+    text-align: center;
+    color: #333;
+    margin-bottom: 30px;
+}
+
+/* 表單每一橫列的容器 */
+.form-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 25px;
+}
+
+/* "選擇日期：" 等標籤文字 */
+.form-label {
+    color: #000;
+    font-family: "Noto Sans TC", sans-serif;
+    font-size: 16px;
+    font-weight: 400;
+    letter-spacing: 4px;
+    width: 100px; /* 固定寬度讓標籤對齊 */
+    flex-shrink: 0; /* 防止標籤被壓縮 */
+}
+
+/* 所有輸入框的統一樣式 */
+.form-input {
+    flex-grow: 1; /* 讓輸入框填滿剩餘空間 */
+    background-color: rgba(255, 255, 255, 0.40);
+    box-shadow: -5px 5px 5px 0px #ffffff inset, 5px -5px 5px 0px rgba(224, 178, 146, 0.25) inset;
+    border: 1px solid rgba(255, 255, 255, 0.5); /* 加一個細邊框更有質感 */
+    border-radius: 25px; /* 圓角 */
+    padding: 12px 15px;
+    font-size: 16px;
+    color: #333;
+    height: 48px; /* 固定高度 */
+    box-sizing: border-box; /* 確保 padding 不會影響總寬高 */
+}
+
+/* 針對選擇項目的框框微調 */
+.service-selection-box {
+    min-height: 80px; /* 給予多一點高度 */
+    padding-top: 10px;
+}
+
+/* 按鈕群組 */
+.button-group {
+    display: flex;
+    justify-content: space-around; /* 讓按鈕平均分佈 */
+    margin-top: 40px;
+}
+
+/* 表單按鈕統一樣式 */
+.form-button {
+    background: #F0E8F3;
+    color: #6A4C95;
+    border: none;
+    border-radius: 30px;
+    padding: 12px 0;
+    width: 45%; /* 每個按鈕佔約 45% 寬度 */
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.1), -2px -2px 5px rgba(255,255,255,0.7);
+    transition: all 0.2s ease-in-out;
+}
+
+.form-button:hover {
+    box-shadow: 4px 4px 8px rgba(0,0,0,0.15), -4px -4px 8px rgba(255,255,255,0.9);
+}
+
+.form-button.submit {
+    background: #D5B8E8; /* 送出按鈕用深一點的顏色 */
+}

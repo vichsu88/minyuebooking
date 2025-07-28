@@ -1,33 +1,46 @@
+/* 【Agent 建議】使用 CSS 變數，方便未來統一管理顏色 */
+:root {
+    --brand-purple-deep: #8e44ad;
+    --brand-purple-mid: #9b59b6;
+    --brand-purple-light: #c4a7e7;
+    --brand-pink: #E507C8;
+    --text-dark: #333;
+    --text-black: #000;
+    --btn-text-color: rgba(139, 112, 147, 0.88);
+    --btn-text-shadow: rgba(98, 76, 126, 0.60);
+}
+
 /* 基本樣式重設與字體設定 */
 body, html {
     margin: 0;
     padding: 0;
     width: 100%;
     min-height: 100%;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    color: #333;
-    /* 【最終修正】我們不再將背景放在 body 上，只保留備用底色 */
-    background-color: #c4a7e7; 
+    /* 【Agent 建議】明確指定 Noto Sans TC 為主要字體 */
+    font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: var(--text-dark);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    background-color: var(--brand-purple-light); 
 }
 
-/* 【最終修正】使用 ::before 偽元素來建立一個固定的背景圖層 */
 body::before {
     content: '';
-    position: fixed; /* 將這個圖層釘在畫面上 */
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: -1; /* 把它放到所有內容的最底層 */
-
-    /* 將所有背景圖樣式都移到這裡 */
-    background-image: url('background.png');
+    z-index: -1;
+    background-image: url('../images/background.png');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
 }
 
-/* 主要容器 */
+/* ... 其他樣式保持不變 ... */
+
 .container {
     width: 90%;
     max-width: 400px;
@@ -37,7 +50,6 @@ body::before {
     box-sizing: border-box;
 }
 
-/* 內容的半透明白色底框 */
 .content-box {
     background-color: rgba(255, 255, 255, 0.85);
     padding: 30px;
@@ -47,7 +59,7 @@ body::before {
 }
 
 h1 {
-    color: #8e44ad;
+    color: var(--brand-purple-deep);
     margin-bottom: 20px;
 }
 
@@ -57,9 +69,8 @@ p {
     text-align: left;
 }
 
-/* 主要按鈕樣式 */
 .cta-button {
-    background-color: #9b59b6;
+    background-color: var(--brand-purple-mid);
     color: white;
     border: none;
     padding: 15px 30px;
@@ -72,16 +83,14 @@ p {
 }
 
 .cta-button:hover {
-    background-color: #8e44ad;
+    background-color: var(--brand-purple-deep);
     transform: translateY(-2px);
 }
-/* ==================== 預約表單畫面樣式 ==================== */
 
 .booking-title {
-    color: #E507C8;
+    color: var(--brand-pink);
     text-align: center;
     text-shadow: 1px 4px 4px rgba(98, 76, 126, 0.40);
-    font-family: "Noto Sans TC", sans-serif;
     font-size: 40px;
     font-style: normal;
     font-weight: 400;
@@ -92,7 +101,7 @@ p {
 
 .welcome-text {
     text-align: center;
-    color: #333;
+    color: var(--text-dark);
     margin-bottom: 30px;
 }
 
@@ -103,8 +112,7 @@ p {
 }
 
 .form-label {
-    color: #000;
-    font-family: "Noto Sans TC", sans-serif;
+    color: var(--text-black);
     font-size: 16px;
     font-weight: 400;
     letter-spacing: 4px;
@@ -120,7 +128,7 @@ p {
     border-radius: 25px;
     padding: 12px 15px;
     font-size: 16px;
-    color: #333;
+    color: var(--text-dark);
     height: 48px; 
     box-sizing: border-box;
     -webkit-appearance: none;
@@ -153,7 +161,7 @@ select.form-input {
     padding: 0 20px; 
     
     background-color: lightgray;
-    background-image: linear-gradient(123deg, #F7F9FA 13.61%, #EBECED 97.74%), url('btn-bg.jpg');
+    background-image: linear-gradient(123deg, #F7F9FA 13.61%, #EBECED 97.74%), url('../images/btn-bg.jpg');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -166,9 +174,8 @@ select.form-input {
     
     filter: blur(0.5px);
 
-    color: rgba(139, 112, 147, 0.88);
-    text-shadow: 1px 2px 3px rgba(98, 76, 126, 0.60);
-    font-family: "Noto Sans TC", sans-serif;
+    color: var(--btn-text-color);
+    text-shadow: 1px 2px 3px var(--btn-text-shadow);
     font-size: 25px;
     font-style: normal;
     font-weight: 400;
@@ -191,7 +198,6 @@ select.form-input {
     transform: translateY(1px);
 }
 
-/* 電腦版提示訊息樣式 */
 #desktop-warning {
     display: none;
     color: white;
@@ -202,7 +208,6 @@ select.form-input {
     font-size: 18px;
 }
 
-/* Media Query，當螢幕寬度大於 768px 時觸發 */
 @media (min-width: 768px) {
     #main-content {
         display: none;

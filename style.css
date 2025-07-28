@@ -14,10 +14,8 @@ body, html {
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    background-color: #c4a7e7; /* 備用底色 */
-
-    /* 【最終修正】移除 fixed 屬性，改為預設的 scroll，以修復 iOS 上的問題 */
     background-attachment: scroll; 
+    background-color: #c4a7e7; 
 }
 
 /* 主要容器 */
@@ -139,40 +137,56 @@ select.form-input {
 /* ==================== (請用這段新的取代舊的) 表單按鈕統一樣式 ==================== */
 
 .form-button {
-    /* 背景圖設定 */
-    background-image: url('btn-bg.jpg');
+    /* 佈局與尺寸 */
+    width: 45%;
+    height: 60px; /* 根據您的設計調整高度 */
+    flex-shrink: 0;
+    
+    /* 背景 (多層次) */
+    background-color: lightgray; /* 備用底色 */
+    background-image: linear-gradient(123deg, #F7F9FA 13.61%, #EBECED 97.74%), url('btn-bg.jpg');
     background-size: cover;
     background-position: center;
-    background-color: transparent; /* 移除底色，才能看到背景圖 */
+    background-repeat: no-repeat;
+    background-blend-mode: multiply, normal;
 
-    /* 字體樣式 (完全按照您的最新要求) */
+    /* 邊框與圓角 */
+    border: none;
+    border-radius: 30px;
+    
+    /* 陰影 (多層次，打造立體感) */
+    box-shadow: -3px -3px 0 0 #FFF, 0 3px 0 0 #D6DADF, 0 -20px 20px 0 rgba(255, 255, 255, 0.20) inset;
+    
+    /* 濾鏡 */
+    filter: blur(0.5px);
+
+    /* 字體樣式 */
     color: rgba(139, 112, 147, 0.88);
     text-shadow: 1px 2px 3px rgba(98, 76, 126, 0.60);
     font-family: "Noto Sans TC", sans-serif;
     font-size: 25px;
     font-style: normal;
     font-weight: 400;
-    line-height: normal; /* 讓文字垂直置中 */
+    line-height: 60px; /* 讓文字垂直置中 */
     letter-spacing: 2.5px;
-    
-    /* 按鈕基本樣式 */
-    border: none;
-    border-radius: 30px;
-    padding: 12px 0;
-    width: 45%;
+    text-align: center;
+
+    /* 互動效果 */
     cursor: pointer;
-    box-shadow: 2px 2px 5px rgba(0,0,0,0.1), -2px -2px 5px rgba(255,255,255,0.7);
     transition: all 0.2s ease-in-out;
 }
 
 .form-button:hover {
-    box-shadow: 4px 4px 8px rgba(0,0,0,0.15), -4px -4px 8px rgba(255,255,255,0.9);
-    transform: scale(1.02);
+    /* 滑鼠懸停時讓按鈕稍微變亮 */
+    filter: blur(0.5px) brightness(1.05);
+    transform: translateY(-2px);
 }
 
-/* 原本的 .form-button.submit 已經不需要了，
-   因為所有 .form-button 都長得一樣，所以可以直接刪除。
-*/
+.form-button:active {
+    /* 按下時產生內陰影，模擬被按下去的效果 */
+    box-shadow: -1px -1px 0 0 #FFF, 0 1px 0 0 #D6DADF, 0 5px 10px 0 rgba(0, 0, 0, 0.2) inset;
+    transform: translateY(1px);
+}
 
 /* 電腦版提示訊息樣式 */
 #desktop-warning {
@@ -193,7 +207,6 @@ select.form-input {
     #desktop-warning {
         display: block;
     }
-    /* 【最終修正】只在電腦版才開啟 fixed 讓它有視差效果 */
     body, html {
         background-attachment: fixed;
     }

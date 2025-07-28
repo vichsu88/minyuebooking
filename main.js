@@ -7,47 +7,65 @@ document.addEventListener("DOMContentLoaded", function() {
     const agreeButton = document.getElementById('agreeButton');
     const displayNameSpan = document.getElementById('displayName');
 
-    // 1. 初始化 LIFF
-    // 這裡的 LIFF ID 保持不變，繼續用您設定好的那一個
+    // 1. 初始化 LIFF (您的 LIFF ID 是正確的，保持不變)
     liff.init({ liffId: '2007825302-BWYw4PK5' })
         .then(() => {
             console.log("LIFF Initialization succeeded.");
-
-            // **【新流程核心】**
-            // 初始化成功後，立刻檢查使用者是否已經登入
             if (liff.isLoggedIn()) {
-                // 如果已經登入，代表使用者已經授權過了 (可能是剛授權完跳轉回來)
-                // 我們直接執行下一步：取得使用者資料並切換畫面
                 showBookingScreen();
             } else {
-                // 如果還沒登入，代表這是使用者第一次打開
-                // 我們什麼都不用做，就停留在歡迎畫面，並啟用按鈕讓他點擊
                 agreeButton.disabled = false;
             }
         })
         .catch((err) => {
             console.error("LIFF Initialization failed.", err);
-            // 為了方便除錯，我們把詳細錯誤印出來看看
             alert("系統初始化失敗，錯誤訊息：" + JSON.stringify(err));
         });
 
+    // 在按鈕可以被點擊前，先將它設為禁用狀態
+    agreeButton.disabled = true;
+
     // 2. 為「同意」按鈕加上點擊事件
     agreeButton.addEventListener('click', function() {
-        // 這個按鈕現在只有一個功能：在使用者未登入時，引導他去登入
-        liff.login();
+        // 我們移除 redirectUri 參數，讓 LIFF SDK 自動處理，避免網址不一致問題
+        liff.login(); 
     });
 
-    // 3. 定義「取得資料並切換畫面」的函式 (這部分不變)
+    // 3. 定義「取得資料並切換畫面」的函式 (整合 Agent 建議的最終版)
     function showBookingScreen() {
-        liff.getProfile()
-            .then(profile => {
-                displayNameSpan.textContent = profile.displayName;
-                welcomeScreen.style.display = 'none';
-                bookingScreen.style.display = 'block';
-            })
-            .catch((err) => {
-                console.error("Failed to get profile.", err);
-                alert("無法取得您的 LINE 資料，請確認授權後再試。");
-            });
+        let userName = '顧客'; // 預設名字
+
+        // **【新流程核心】**
+        // 先用 liff.isInClient() 判斷是不是在 LINE App 內部
+        if (liff.isInClient()) {
+            // **情況一：在 LINE App 內部**
+            // 我們可以安全地呼叫 liff.getProfile()
+            liff.getProfile()
+                .then(profile => {
+                    userName = profile.displayName;
+                    displayNameSpan.textContent = userName;
+                    switchToBookingView();
+                })
+                .catch((err) => {
+                    console.error("Failed to get profile.", err);
+                    alert("無法取得您的 LINE 資料，請確認授權後再試。");
+                });
+        } else {
+            // **情況二：在外部瀏覽器 (電腦 Chrome, 手機 Safari 等)**
+            // 我們不能用 getProfile()，但可以退而求其次，用 getDecodedIDToken()
+            // 它一樣能拿到客人的名字，而且在外部瀏覽器中也能運作
+            const idToken = liff.getDecodedIDToken();
+            if (idToken && idToken.name) {
+                userName = idToken.name; // 從 ID Token 中取得名字
+            }
+            displayNameSpan.textContent = userName;
+            switchToBookingView();
+        }
+    }
+
+    // 將畫面切換的動作獨立成一個函式，方便共用
+    function switchToBookingView() {
+        welcomeScreen.style.display = 'none';
+        bookingScreen.style.display = 'block';
     }
 });

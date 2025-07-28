@@ -8,53 +8,44 @@ document.addEventListener("DOMContentLoaded", function() {
     const displayNameSpan = document.getElementById('displayName');
 
     // 1. 初始化 LIFF
-    // 請記得將 'YOUR_LIFF_ID' 換成您真實的 LIFF ID
-    liff.init({ liffId: '2007825302' })
+    // 這裡的 LIFF ID 保持不變，繼續用您設定好的那一個
+    liff.init({ liffId: '2007825302-BWYw4PK5' })
         .then(() => {
             console.log("LIFF Initialization succeeded.");
-            // 初始化成功後，就可以讓「同意」按鈕可以被點擊了
-            agreeButton.disabled = false;
+
+            // **【新流程核心】**
+            // 初始化成功後，立刻檢查使用者是否已經登入
+            if (liff.isLoggedIn()) {
+                // 如果已經登入，代表使用者已經授權過了 (可能是剛授權完跳轉回來)
+                // 我們直接執行下一步：取得使用者資料並切換畫面
+                showBookingScreen();
+            } else {
+                // 如果還沒登入，代表這是使用者第一次打開
+                // 我們什麼都不用做，就停留在歡迎畫面，並啟用按鈕讓他點擊
+                agreeButton.disabled = false;
+            }
         })
         .catch((err) => {
             console.error("LIFF Initialization failed.", err);
-            alert("系統初始化失敗，請稍後再試。");
+            // 為了方便除錯，我們把詳細錯誤印出來看看
+            alert("系統初始化失敗，錯誤訊息：" + JSON.stringify(err));
         });
-    
-    // 在按鈕可以被點擊前，先將它設為禁用狀態，避免使用者在 LIFF 初始化完成前點擊
-    agreeButton.disabled = true;
 
     // 2. 為「同意」按鈕加上點擊事件
     agreeButton.addEventListener('click', function() {
-        // 檢查使用者是否已經登入 LINE
-        if (!liff.isLoggedIn()) {
-            // 如果沒登入，就呼叫 liff.login() 進行登入並請求授權
-            // 這個動作會跳轉到 LINE 的授權畫面，完成後會自動跳轉回「同一個頁面」
-            // 屆時，這整段 JavaScript 會重新執行一次，但 liff.isLoggedIn() 就會是 true 了
-            liff.login();
-        } else {
-            // 如果已經登入了，就直接執行下一步：取得使用者資料並切換畫面
-            showBookingScreen();
-        }
+        // 這個按鈕現在只有一個功能：在使用者未登入時，引導他去登入
+        liff.login();
     });
 
-    // 3. 定義「取得資料並切換畫面」的函式
+    // 3. 定義「取得資料並切換畫面」的函式 (這部分不變)
     function showBookingScreen() {
-        // 呼叫 liff.getProfile() 來取得使用者的公開資料
         liff.getProfile()
             .then(profile => {
-                // 成功取得資料後...
-
-                // 將客人的名字填入到畫面的 <span> 元素中
                 displayNameSpan.textContent = profile.displayName;
-
-                // 執行畫面切換：隱藏歡迎畫面，顯示預約畫面
                 welcomeScreen.style.display = 'none';
                 bookingScreen.style.display = 'block';
-
-                // 在這裡，我們未來還可以加上「載入服務項目」等其他功能
             })
             .catch((err) => {
-                // 如果出錯，顯示錯誤訊息
                 console.error("Failed to get profile.", err);
                 alert("無法取得您的 LINE 資料，請確認授權後再試。");
             });

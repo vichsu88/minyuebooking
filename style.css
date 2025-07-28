@@ -3,28 +3,34 @@ body, html {
     margin: 0;
     padding: 0;
     width: 100%;
-    min-height: 100%; /* 使用 min-height 確保內容超長時背景能延伸 */
+    min-height: 100%;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     color: #333;
-    display: flex;
-    justify-content: center;
-    
-    /* 【最終修正】將垂直置中 (center) 改為靠上對齊 (flex-start) */
-    align-items: flex-start;
+    /* 【最終修正】我們不再將背景放在 body 上，只保留備用底色 */
+    background-color: #c4a7e7; 
+}
 
+/* 【最終修正】使用 ::before 偽元素來建立一個固定的背景圖層 */
+body::before {
+    content: '';
+    position: fixed; /* 將這個圖層釘在畫面上 */
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1; /* 把它放到所有內容的最底層 */
+
+    /* 將所有背景圖樣式都移到這裡 */
     background-image: url('background.png');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
-    background-attachment: scroll; 
-    background-color: #c4a7e7; 
 }
 
 /* 主要容器 */
 .container {
     width: 90%;
     max-width: 400px;
-    /* 為容器加上一些頂部距離，讓它不會黏在最上面 */
     margin-top: 5vh; 
     margin-bottom: 5vh;
     padding: 20px;
@@ -203,8 +209,5 @@ select.form-input {
     }
     #desktop-warning {
         display: block;
-    }
-    body, html {
-        background-attachment: fixed;
     }
 }

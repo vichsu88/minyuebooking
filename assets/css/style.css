@@ -21,9 +21,6 @@ body, html {
     display: flex;
     justify-content: center;
     align-items: flex-start;
-    
-    /* 【最終修正】將備用底色從紫色改為白色，解決透明區域透色問題 */
-    background-color: #fff; 
 }
 
 body::before {

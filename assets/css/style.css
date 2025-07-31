@@ -1,243 +1,245 @@
-/* ... (前面的 :root 和 body::before 樣式保持不變) ... */
+/* style.css – 茗月髮型設計預約系統完整樣式 */
+/* =============================================
+   • 手機優先（Mobile‑first）
+   • 使用 CSS 變數統一品牌色
+   • 具備深淺陰影、內凹／凸按鈕效果
+   • 以 400px 為最大寬度，內容置中
+   • 桌面版顯示警告文字，隱藏主流程
+   ============================================= */
+
 :root {
-    --brand-purple-deep: #8e44ad;
-    --brand-purple-mid: #9b59b6;
-    --brand-pink: #E507C8;
-    --text-dark: #333;
-    --text-black: #000;
-    --btn-text-color: rgba(139, 112, 147, 0.88);
-    --btn-text-shadow: rgba(98, 76, 126, 0.60);
+  /* 品牌色 */
+  --brand-purple-deep: #8e44ad;
+  --brand-purple-mid: #9b59b6;
+  --brand-pink: #E507C8;
+  /* 文字顏色 */
+  --text-dark: #333;
+  --text-black: #000;
+  /* 按鈕文字／陰影顏色 */
+  --btn-text-color: rgba(139, 112, 147, 0.88);
+  --btn-text-shadow: rgba(98, 76, 126, 0.60);
 }
 
-body, html {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    min-height: 100%;
-    font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-    color: var(--text-dark);
-    /* 【最終修正】移除 display:flex，回到最穩定的排版方式 */
-    background-color: #fff; 
+/* ====== Global Reset ====== */
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  color: var(--text-dark);
+  background-color: #fff;
+  overflow-x: hidden; /* 防止橫向捲動 */
+}
+
+/* ====== 背景影像固定覆蓋 ====== */
 body::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: -1;
-    background-image: url('../images/background.png');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  background-image: url("../images/background.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  filter: brightness(0.96);
 }
 
-/* 主要容器 */
+/* ====== 主要容器：置中、寬度限制 ====== */
 .container {
-    width: 90%;
-    max-width: 400px;
-    /* 【最終修正】使用 margin: auto 來達成完美的水平置中 */
-    margin: 5vh auto; 
-    padding: 20px;
-    box-sizing: border-box;
+  width: 90%;
+  max-width: 400px;
+  margin: 5vh auto; /* 上下留白 5vh；水平置中 */
+  padding: 20px;
 }
 
-/* ... 後續所有樣式都和上一版相同，保持不變 ... */
-
-/* (請將您 style.css 中 .container 之後的所有樣式，都複製貼到這裡) */
-
+/* ====== 歡迎 & 說明區塊 ====== */
 .content-box {
-    background-color: rgba(255, 255, 255, 0.85);
-    padding: 30px;
-    border-radius: 15px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    text-align: center;
+  background-color: rgba(255, 255, 255, 0.85);
+  padding: 30px;
+  border-radius: 15px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  text-align: center;
 }
 
 h1 {
-    color: var(--brand-purple-deep);
-    margin-bottom: 20px;
+  color: var(--brand-purple-deep);
+  margin: 0 0 20px;
+  font-size: 1.75rem;
+  font-weight: 700;
 }
 
 p {
-    line-height: 1.6;
-    margin-bottom: 30px;
-    text-align: left;
+  line-height: 1.6;
+  margin: 0 0 30px;
 }
 
+/* ====== Call‑to‑Action 按鈕 ====== */
 .cta-button {
-    background-color: var(--brand-purple-mid);
-    color: white;
-    border: none;
-    padding: 15px 30px;
-    border-radius: 50px;
-    font-size: 18px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background-color 0.3s, transform 0.2s;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  display: inline-block;
+  background-color: var(--brand-purple-mid);
+  color: #fff;
+  border: none;
+  padding: 15px 30px;
+  border-radius: 50px;
+  font-size: 1.125rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.3s, transform 0.2s;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .cta-button:hover {
-    background-color: var(--brand-purple-deep);
-    transform: translateY(-2px);
+  background-color: var(--brand-purple-deep);
+  transform: translateY(-2px);
 }
 
+/* ====== 預約畫面標題 ====== */
 .booking-title {
-    color: var(--brand-pink);
-    text-align: center;
-    text-shadow: 1px 4px 4px rgba(98, 76, 126, 0.40);
-    font-size: 40px;
-    font-style: normal;
-    font-weight: 400;
-    line-height: normal;
-    letter-spacing: 10px;
-    margin-bottom: 20px;
+  color: var(--brand-pink);
+  text-align: center;
+  text-shadow: 1px 4px 4px rgba(98, 76, 126, 0.4);
+  font-size: 2.5rem;
+  letter-spacing: 10px;
+  margin-bottom: 20px;
 }
 
 .welcome-text {
-    text-align: center;
-    color: var(--text-dark);
-    margin-bottom: 30px;
+  text-align: center;
+  margin-bottom: 30px;
 }
 
+/* ====== 表單 ====== */
 .form-row {
-    display: flex;
-    align-items: center;
-    margin-bottom: 25px;
+  display: flex;
+  align-items: center;
+  margin-bottom: 25px;
 }
 
 .form-label {
-    color: var(--text-black);
-    font-size: 16px;
-    font-weight: 400;
-    letter-spacing: 4px;
-    width: 100px; 
-    flex-shrink: 0;
+  width: 100px;
+  flex-shrink: 0;
+  color: var(--text-black);
+  font-size: 1rem;
+  letter-spacing: 4px;
 }
 
 .form-input {
-    flex-grow: 1;
-    background-color: rgba(255, 255, 255, 0.40);
-    box-shadow: -5px 5px 5px 0px #ffffff inset, 5px -5px 5px 0px rgba(224, 178, 146, 0.25) inset;
-    border: 1px solid rgba(255, 255, 255, 0.5); 
-    border-radius: 25px;
-    padding: 12px 15px;
-    font-size: 16px;
-    color: var(--text-dark);
-    height: 48px; 
-    box-sizing: border-box;
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    appearance: none;
+  flex-grow: 1;
+  height: 48px;
+  padding: 12px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 25px;
+  font-size: 1rem;
+  background-color: rgba(255, 255, 255, 0.4);
+  box-shadow: -5px 5px 5px 0 #ffffff inset,
+    5px -5px 5px 0 rgba(224, 178, 146, 0.25) inset;
+  appearance: none; /* 移除預設箭頭 */
 }
 
+/* 自訂 <select> 向下箭頭 */
 select.form-input {
-    background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%236A4C95%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
-    background-repeat: no-repeat;
-    background-position: right 15px center;
-    background-size: 12px;
+  background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg xmlns='http://www.w3.org/2000/svg' width='292.4' height='292.4'%3E%3Cpath fill='%236A4C95' d='M287 69.4a17.6 17.6 0 0 0-13-5.4H18.4c-5 0-9.3 1.8-12.9 5.4A17.6 17.6 0 0 0 0 82.2c0 5 1.8 9.3 5.4 12.9l128 127.9c3.6 3.6 7.8 5.4 12.8 5.4s9.2-1.8 12.8-5.4L287 95c3.5-3.5 5.4-7.8 5.4-12.8 0-5-1.9-9.2-5.5-12.8z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+  background-size: 12px;
 }
 
+/* ====== 服務選擇按鈕 ====== */
 #service-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    border: none;
-    box-shadow: none;
-    background-color: transparent;
-    min-height: 80px;
-    height: auto;
-    padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 80px;
 }
 
 .service-button {
-    border: 1px solid #c5a9e8;
-    background-color: #f7f2fc;
-    color: #5b3a7e;
-    border-radius: 20px;
-    padding: 8px 16px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
+  border: 1px solid #c5a9e8;
+  background-color: #f7f2fc;
+  color: #5b3a7e;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
 }
 
 .service-button.selected {
-    background-color: var(--brand-purple-mid);
-    color: white;
-    border-color: var(--brand-purple-deep);
-    font-weight: bold;
-    transform: scale(1.05);
+  background-color: var(--brand-purple-mid);
+  color: #fff;
+  border-color: var(--brand-purple-deep);
+  font-weight: 700;
+  transform: scale(1.05);
 }
 
+/* ====== 表單按鈕群 ====== */
 .button-group {
-    display: flex;
-    justify-content: space-around;
-    gap: 15px;
-    margin-top: 40px;
+  display: flex;
+  justify-content: space-around;
+  gap: 15px;
+  margin-top: 40px;
 }
 
 .form-button {
-    flex-grow: 1;
-    height: 60px;
-    flex-shrink: 0;
-    padding: 0 20px; 
-    
-    background-color: lightgray;
-    background-image: linear-gradient(123deg, #F7F9FA 13.61%, #EBECED 97.74%), url('../images/btn-bg.jpg');
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
-    background-blend-mode: multiply, normal;
-
-    border: none;
-    border-radius: 30px;
-    
-    box-shadow: -3px -3px 0 0 #FFF, 0 3px 0 0 #D6DADF, 0 -20px 20px 0 rgba(255, 255, 255, 0.20) inset;
-    
-    filter: blur(0.5px);
-
-    color: var(--btn-text-color);
-    text-shadow: 1px 2px 3px var(--btn-text-shadow);
-    font-size: 25px;
-    font-style: normal;
-    font-weight: 400;
-    line-height: 60px;
-    letter-spacing: 2.5px;
-    text-align: center;
-    white-space: nowrap;
-
-    cursor: pointer;
-    transition: all 0.2s ease-in-out;
+  flex: 1 1 0;
+  height: 60px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 30px;
+  font-size: 1.25rem;
+  letter-spacing: 2.5px;
+  color: var(--btn-text-color);
+  text-shadow: 1px 2px 3px var(--btn-text-shadow);
+  background-image:
+    linear-gradient(123deg, #f7f9fa 13.61%, #ebeced 97.74%),
+    url("../images/btn-bg.jpg");
+  background-size: cover;
+  background-blend-mode: multiply, normal;
+  box-shadow: -3px -3px 0 #fff, 0 3px 0 #d6dadf,
+    0 -20px 20px rgba(255, 255, 255, 0.2) inset;
+  filter: blur(0.5px);
+  transition: all 0.2s ease-in-out;
+  cursor: pointer;
 }
 
 .form-button:hover {
-    filter: blur(0.5px) brightness(1.05);
-    transform: translateY(-2px);
+  filter: blur(0.5px) brightness(1.05);
+  transform: translateY(-2px);
 }
 
 .form-button:active {
-    box-shadow: -1px -1px 0 0 #FFF, 0 1px 0 0 #D6DADF, 0 5px 10px 0 rgba(0, 0, 0, 0.2) inset;
-    transform: translateY(1px);
+  box-shadow: -1px -1px 0 #fff, 0 1px 0 #d6dadf,
+    0 5px 10px rgba(0, 0, 0, 0.2) inset;
+  transform: translateY(1px);
 }
 
+/* ====== 桌面版警告 ====== */
 #desktop-warning {
-    display: none;
-    color: white;
-    background-color: rgba(0,0,0,0.7);
-    padding: 30px;
-    border-radius: 10px;
-    text-align: center;
-    font-size: 18px;
+  display: none;
+  color: #fff;
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 30px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 1.125rem;
 }
 
+/* 桌面版媒體查詢：隱藏主流程，顯示警告 */
 @media (min-width: 768px) {
-    #main-content {
-        display: none;
-    }
-    #desktop-warning {
-        display: block;
-    }
+  #main-content {
+    display: none !important;
+  }
+  #desktop-warning {
+    display: block;
+  }
 }

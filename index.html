@@ -5,25 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>茗月髮型設計 - 預約服務</title>
 
-  <!-- 字體 -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
 
-  <!-- 樣式 -->
   <link rel="stylesheet" href="assets/css/style.css?v=2.2">
 </head>
 <body>
 
-  <!-- 桌面警告 -->
   <div id="desktop-warning">
     <p>此預約系統僅支援手機版操作，請用手機開啟此網頁，謝謝！</p>
   </div>
 
-  <!-- 主要流程 -->
   <main id="main-content">
 
-    <!-- 歡迎畫面 -->
     <div id="welcome-screen" class="container">
       <div class="content-box">
         <h1>預約流程說明</h1>
@@ -36,7 +31,6 @@
       </div>
     </div>
 
-    <!-- 預約畫面 -->
     <div id="booking-screen" class="container" style="display:none;">
       <h1 class="booking-title">預約服務</h1>
       <p class="welcome-text">Hi <span id="displayName"></span>，請填寫預約資訊：</p>
@@ -80,16 +74,15 @@
     </div>
   </main>
 
-  <!-- 價目表 Modal -->
   <div id="price-list-modal" class="modal-overlay hidden">
     <div class="modal-content">
       <button id="closeModalButton" class="close-button">&times;</button>
       <h2>價目表</h2>
-      <div id="modal-price-list"></div>
+      <div id="modal-price-list">
+        </div>
     </div>
   </div>
 
-  <!-- LIFF SDK 與 主腳本 -->
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="main.js"></script>
 </body>

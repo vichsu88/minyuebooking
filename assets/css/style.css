@@ -17,15 +17,17 @@
 }
 
 /* ---------- Reset / Global ---------- */
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+* { 
+  box-sizing: border-box; 
+  -webkit-tap-highlight-color: transparent; 
+}
 
 html, body {
   margin: 0;
   padding: 0;
   width: 100%;
   min-height: 100%;
-  font-family: "Noto Sans TC",
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+  font-family: "Noto Sans TC", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   color: var(--text-dark);
   background: #fff;
@@ -79,6 +81,7 @@ p { line-height: 1.6; margin: 0 0 30px; }
   transition: background .3s, transform .2s;
   box-shadow: 0 2px 5px rgba(0,0,0,.2);
 }
+
 .cta-button:hover {
   background: var(--brand-purple-deep);
   transform: translateY(-2px);
@@ -93,10 +96,19 @@ p { line-height: 1.6; margin: 0 0 30px; }
   letter-spacing: 10px;
   margin-bottom: 20px;
 }
-.welcome-text { text-align: center; margin-bottom: 30px; }
+
+.welcome-text { 
+  text-align: center; 
+  margin-bottom: 30px; 
+}
 
 /* ---------- 表單 ---------- */
-.form-row { display: flex; align-items: center; margin-bottom: 25px; }
+.form-row { 
+  display: flex; 
+  align-items: center; 
+  margin-bottom: 25px; 
+}
+
 .form-label {
   width: 100px;
   flex-shrink: 0;
@@ -104,6 +116,7 @@ p { line-height: 1.6; margin: 0 0 30px; }
   font-size: 1rem;
   letter-spacing: 4px;
 }
+
 .form-input {
   flex: 1;
   height: 48px;
@@ -116,10 +129,9 @@ p { line-height: 1.6; margin: 0 0 30px; }
               5px -5px 5px rgba(224,178,146,.25) inset;
   appearance: none;
 }
-/* 自訂 <select> 箭頭 */
+
 select.form-input {
-  background:
-   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='292.4' height='292.4'%3E%3Cpath fill='%236A4C95' d='M287 69.4a17.6 17.6 0 0 0-13-5.4H18.4c-5 0-9.3 1.8-12.9 5.4A17.6 17.6 0 0 0 0 82.2c0 5 1.8 9.3 5.4 12.9l128 127.9c3.6 3.6 7.8 5.4 12.8 5.4s9.2-1.8 12.8-5.4L287 95c3.5-3.5 5.4-7.8 5.4-12.8 0-5-1.9-9.2-5.5-12.8z'/%3E%3C/svg%3E")
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='292.4' height='292.4'%3E%3Cpath fill='%236A4C95' d='M287 69.4a17.6 17.6 0 0 0-13-5.4H18.4c-5 0-9.3 1.8-12.9 5.4A17.6 17.6 0 0 0 0 82.2c0 5 1.8 9.3 5.4 12.9l128 127.9c3.6 3.6 7.8 5.4 12.8 5.4s9.2-1.8 12.8-5.4L287 95c3.5-3.5 5.4-7.8 5.4-12.8 0-5-1.9-9.2-5.5-12.8z'/%3E%3C/svg%3E")
    no-repeat right 15px center / 12px;
 }
 
@@ -130,6 +142,7 @@ select.form-input {
   gap: 10px;
   min-height: 80px;
 }
+
 .service-button {
   border: 1px solid #c5a9e8;
   background: #f7f2fc;
@@ -140,6 +153,7 @@ select.form-input {
   cursor: pointer;
   transition: .2s;
 }
+
 .service-button.selected {
   background: var(--brand-purple-mid);
   color: #fff;
@@ -149,7 +163,12 @@ select.form-input {
 }
 
 /* 按鈕群 */
-.button-group { display: flex; gap: 15px; margin-top: 40px; }
+.button-group { 
+  display: flex; 
+  gap: 15px; 
+  margin-top: 40px; 
+}
+
 .form-button {
   flex: 1;
   height: 60px;
@@ -172,7 +191,12 @@ select.form-input {
   transition: .2s;
   cursor: pointer;
 }
-.form-button:hover { filter: blur(.5px) brightness(1.05); transform: translateY(-2px); }
+
+.form-button:hover { 
+  filter: blur(.5px) brightness(1.05); 
+  transform: translateY(-2px); 
+}
+
 .form-button:active {
   box-shadow: -1px -1px 0 #fff,
               0 1px 0 #d6dadf,
@@ -190,48 +214,70 @@ select.form-input {
   text-align: center;
   font-size: 1.125rem;
 }
+
 @media (min-width: 768px) {
-  #main-content { display: none !important; }
-  #desktop-warning { display: block; }
+  #main-content { 
+    display: none !important; 
+  }
+  #desktop-warning { 
+    display: block; 
+  }
 }
 
-/* ---------- 價目表 Modal ---------- */
+/* 【新功能】價目表 Modal 樣式 */
 .modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  opacity: 1;
-  transition: opacity .3s;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    opacity: 1;
+    transition: opacity .3s ease;
 }
-.modal-overlay.hidden { opacity: 0; pointer-events: none; }
+
+.modal-overlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
 .modal-content {
-  background: #fff;
-  padding: 20px;
-  border-radius: 15px;
-  width: 85%;
-  max-width: 380px;
-  max-height: 70vh;
-  overflow-y: auto;
-  position: relative;
+    background: #fff;
+    padding: 20px;
+    border-radius: 15px;
+    width: 85%;
+    max-width: 380px;
+    max-height: 70vh;
+    overflow-y: auto;
+    position: relative;
 }
+
 .close-button {
-  position: absolute;
-  top: 10px;
-  right: 15px;
-  background: none;
-  border: none;
-  font-size: 2rem;
-  color: #aaa;
-  cursor: pointer;
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    background: none;
+    border: none;
+    font-size: 2rem;
+    color: #aaa;
+    cursor: pointer;
 }
-#modal-price-list ul { list-style: none; padding: 0; }
+
+#modal-price-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
 #modal-price-list li {
-  display: flex;
-  justify-content: space-between;
-  padding: 10px 0;
-  border-bottom: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 5px;
+    border-bottom: 1px solid #eee;
+    font-size: 0.95rem;
+}
+
+#modal-price-list li:last-child {
+    border-bottom: none;
 }

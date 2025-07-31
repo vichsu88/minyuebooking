@@ -1,7 +1,6 @@
 import os
 import re
 from datetime import datetime
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pymongo import MongoClient
@@ -38,7 +37,6 @@ bookings_col = db.bookings
 def index():
     return "茗月髮型設計 - API 伺服器已啟動！"
 
-
 @app.route("/health")
 def health():
     """簡易健康檢查：DB ping"""
@@ -48,58 +46,76 @@ def health():
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)}), 500
 
-
 @app.route("/api/services", methods=["GET"])
 def get_services():
     try:
         cursor = services_col.find(
-            {"is_active": True},
-            {"name": 1, "price": 1}  # 加入 price
+            {"is_active": True}, 
+            {"name": 1, "price": 1}  # 包含服務名稱和價格
         ).sort("display_order", 1)
+        
         services = [
             {"_id": str(s["_id"]), "name": s["name"], "price": s.get("price", 0)}  # 返回服務名稱和價格
             for s in cursor
         ]
+        
         return jsonify(services), 200
     except PyMongoError as e:
         return jsonify({"error": str(e)}), 500
 
-
 @app.route("/api/bookings", methods=["POST"])
 def create_booking():
-    # 1) 解析 JSON
+    """接收並儲存預約資料"""
     try:
         payload = request.get_json(force=True)
     except Exception:
         return jsonify({"error": "無效的 JSON"}), 400
 
-    # 2) 驗證
+    # 驗證預約資料
     err = _validate_booking(payload)
     if err:
         return jsonify({"error": err}), 400
 
-    # 3) 寫入 DB
     try:
         doc = {
             "date": payload["date"],
             "time": payload["time"],
-            "services": payload["services"],  # e.g. [{id, name}, ...]
-            "status": "pending",  # 後續可改為 confirmed/cancelled 等狀態
+            "services": payload["services"],  # 儲存服務項目
+            "status": "pending",  # 預設狀態為待確認
             "created_at": datetime.utcnow(),
         }
         result = bookings_col.insert_one(doc)
-        return (
-            jsonify({"_id": str(result.inserted_id), "status": "pending"}),
-            201,
-        )
+        return jsonify({"_id": str(result.inserted_id), "status": "pending"}), 201
     except PyMongoError as e:
         return jsonify({"error": str(e)}), 500
 
+# ----------------------------------------------------------------------------- 
+# Helper – 資料驗證
+# ----------------------------------------------------------------------------- 
+def _validate_booking(payload: dict) -> str | None:
+    """驗證預約資料，返回錯誤訊息或 None (驗證通過)"""
+    required = ["date", "time", "services"]
+    for field in required:
+        if field not in payload:
+            return f"缺少欄位：{field}"
+
+    # 日期格式驗證
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", payload["date"]):
+        return "日期格式錯誤，須為 YYYY-MM-DD"
+
+    # 時間格式驗證
+    if not re.fullmatch(r"\d{2}:\d{2}", payload["time"]):
+        return "時間格式錯誤，須為 HH:MM (24 小時制)"
+
+    # 服務項目驗證
+    if not isinstance(payload["services"], list) or len(payload["services"]) == 0:
+        return "services 必須為非空陣列"
+
+    return None
 
 # ----------------------------------------------------------------------------- 
 # Main – 啟動伺服器
 # ----------------------------------------------------------------------------- 
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"

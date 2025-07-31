@@ -1,15 +1,3 @@
-"""app.py – 茗月髮型設計後端伺服器（Flask + MongoDB）
-================================================================
-• 依環境變數 MONGO_URI 連線至 MongoDB
-• 提供：
-    /                -> 偵測 API 是否啟動
-    /health          -> 簡易健康檢查 (DB ping)
-    /api/services    -> 讀取啟用的服務清單 (GET)
-    /api/bookings    -> 建立預約 (POST)
-• 啟用 CORS，僅允許前端網域可再細部調整
-• 可直接部署於 Render / Heroku / Railway 等雲端平台
-"""
-
 import os
 import re
 from datetime import datetime
@@ -20,20 +8,17 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from dotenv import load_dotenv
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
 # 初始化
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
 load_dotenv()
 
 app = Flask(__name__)
-# 允許所有來源，正式環境建議改為固定網域
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 # 取得 MongoDB 連線字串
 MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/minyue_db")
 client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-# 若連線字串本身已含資料庫，get_default_database() 會自動擷取
-# 若無，預設使用 minyue_db
 try:
     db = client.get_default_database() or client.minyue_db
     client.admin.command("ping")
@@ -45,33 +30,9 @@ except Exception as e:
 services_col = db.services
 bookings_col = db.bookings
 
-# -----------------------------------------------------------------------------
-# Helper – 資料驗證
-# -----------------------------------------------------------------------------
-
-def _validate_booking(payload: dict) -> str | None:
-    """驗證預約資料，返回錯誤訊息或 None (驗證通過)"""
-    required = ["date", "time", "services"]
-    for field in required:
-        if field not in payload:
-            return f"缺少欄位：{field}"
-
-    # YYYY-MM-DD
-    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", payload["date"]):
-        return "日期格式錯誤，須為 YYYY-MM-DD"
-
-    # HH:MM 24hr
-    if not re.fullmatch(r"\d{2}:\d{2}", payload["time"]):
-        return "時間格式錯誤，須為 HH:MM (24 小時制)"
-
-    if not isinstance(payload["services"], list) or len(payload["services"]) == 0:
-        return "services 必須為非空陣列"
-
-    return None
-
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
 # Routes
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
 
 @app.route("/")
 def index():
@@ -91,11 +52,14 @@ def health():
 @app.route("/api/services", methods=["GET"])
 def get_services():
     try:
-        cursor = (
-            services_col.find({"is_active": True}, {"name": 1})
-            .sort("display_order", 1)
-        )
-        services = [{"_id": str(s["_id"]), "name": s["name"]} for s in cursor]
+        cursor = services_col.find(
+            {"is_active": True},
+            {"name": 1, "price": 1}  # 加入 price
+        ).sort("display_order", 1)
+        services = [
+            {"_id": str(s["_id"]), "name": s["name"], "price": s.get("price", 0)}  # 返回服務名稱和價格
+            for s in cursor
+        ]
         return jsonify(services), 200
     except PyMongoError as e:
         return jsonify({"error": str(e)}), 500
@@ -132,12 +96,11 @@ def create_booking():
         return jsonify({"error": str(e)}), 500
 
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
 # Main – 啟動伺服器
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- 
 
 if __name__ == "__main__":
-    # 在雲端服務 (Render 等) 通常會注入 PORT 環境變數
     port = int(os.environ.get("PORT", 5001))
     debug_mode = os.environ.get("FLASK_DEBUG", "0") == "1"
     app.run(host="0.0.0.0", port=port, debug=debug_mode)

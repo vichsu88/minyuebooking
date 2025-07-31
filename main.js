@@ -1,46 +1,35 @@
-// main.js – 完整可直接替換版本
-// ============================================
-// 茗月髮型設計預約前端腳本
-// - 使用 LIFF v2
-// - 從雲端後端 (Render) 讀取服務清單
-// - 將預約資料 POST 至後端 /api/bookings
-// - 含基本欄位驗證與錯誤處理
-// ============================================
-
 (() => {
-  /**
-   * ===== 可調整參數 =====
-   * 後端 API Base URL (Render 或其他部署位址，不含結尾斜線)
-   */
-  const BACKEND_BASE_URL = 'https://minyue-api.onrender.com'; // ← 若日後改網域，在此調整
-
-  /**
-   * LINE LIFF App ID
-   * - 可設在 .env 並於打包時注入；這裡先寫死方便示範
-   */
+  const BACKEND_BASE_URL = 'https://minyue-api.onrender.com';
   const LIFF_ID = '2007825302-BWYw4PK5';
 
-  // DOM 元素
-  const welcomeScreen = document.getElementById('welcome-screen');
-  const bookingScreen = document.getElementById('booking-screen');
-  const agreeButton = document.getElementById('agreeButton');
+  // ---- DOM ----
+  const welcomeScreen   = document.getElementById('welcome-screen');
+  const bookingScreen   = document.getElementById('booking-screen');
+  const agreeButton     = document.getElementById('agreeButton');
   const displayNameSpan = document.getElementById('displayName');
-  const bookingForm = document.getElementById('booking-form');
-  const datePicker = document.getElementById('date-picker');
-  const timeSelect = document.getElementById('time-slot');
-  const serviceOptions = document.getElementById('service-options');
-  const priceListButton = document.getElementById('priceListButton');
+  const bookingForm     = document.getElementById('booking-form');
+  const datePicker      = document.getElementById('date-picker');
+  const timeSelect      = document.getElementById('time-slot');
+  const serviceOptions  = document.getElementById('service-options');
 
-  // ============== 主流程 ==============
+  // Modal
+  const priceListButton  = document.getElementById('priceListButton');
+  const priceListModal   = document.getElementById('price-list-modal');
+  const closeModalButton = document.getElementById('closeModalButton');
+  const modalPriceList   = document.getElementById('modal-price-list');
+
+  let allServices = []; // 供價目表 / 驗證使用
+
+  // ── 初始化 ──
   document.addEventListener('DOMContentLoaded', async () => {
     bindUIEvents();
     try {
-      agreeButton.disabled = true; // 初始化前先鎖定
+      agreeButton.disabled = true;
       await liff.init({ liffId: LIFF_ID });
       if (liff.isLoggedIn()) {
         await showBookingScreen();
       } else {
-        agreeButton.disabled = false; // 允許使用者點擊同意
+        agreeButton.disabled = false;
       }
     } catch (err) {
       console.error('[LIFF] 初始化失敗:', err);
@@ -49,7 +38,7 @@
     }
   });
 
-  // 綁定 UI 事件
+  // ── 綁定事件 ──
   function bindUIEvents() {
     agreeButton.addEventListener('click', () => {
       if (!liff.isLoggedIn()) {
@@ -61,43 +50,49 @@
 
     bookingForm.addEventListener('submit', async e => {
       e.preventDefault();
+      const submitBtn = e.target.querySelector('button[type="submit"]');
+      submitBtn.disabled = true;
+      submitBtn.textContent = '傳送中…';
+
       try {
         const payload = collectFormData();
         await submitBooking(payload);
-        alert('預約已送出！我們將透過 LINE 官方帳號與您確認時間。');
+        alert('預約已送出！我們將盡快透過 LINE 與您確認。');
+
+        // 重設
         bookingForm.reset();
-        // 取消所有已選服務按鈕效果
-        serviceOptions.querySelectorAll('.service-button.selected').forEach(btn =>
-          btn.classList.remove('selected')
-        );
+        serviceOptions.querySelectorAll('.service-button.selected')
+                      .forEach(btn => btn.classList.remove('selected'));
       } catch (err) {
-        console.error('[Submit Booking] 失敗:', err);
+        console.error('[submitBooking] failed:', err);
         alert(err.message || '預約送出失敗，請稍後再試。');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '送出預約';
       }
     });
 
-    priceListButton.addEventListener('click', () => {
-      // 此處可替換為實際價目表連結或 modal
-      window.open('https://linktr.ee/minyue_price', '_blank');
+    // 價目表 Modal
+    priceListButton.addEventListener('click', () => priceListModal.classList.remove('hidden'));
+    closeModalButton.addEventListener('click',  () => priceListModal.classList.add('hidden'));
+    priceListModal.addEventListener('click', e => {
+      if (e.target === priceListModal) priceListModal.classList.add('hidden');
     });
   }
 
-  // 顯示預約畫面並載入資料
+  // ── 畫面流程 ──
   async function showBookingScreen() {
     try {
-      const userName = await getUserDisplayName();
-      displayNameSpan.textContent = userName || '顧客';
-      // 切換畫面
+      displayNameSpan.textContent = await getUserDisplayName() || '顧客';
       welcomeScreen.style.display = 'none';
       bookingScreen.style.display = 'block';
       initializeBookingForm();
     } catch (err) {
-      console.error('[Show Booking Screen] 錯誤:', err);
+      console.error('[showBookingScreen]', err);
       alert('無法顯示預約畫面，請稍後再試。');
     }
   }
 
-  // 取得使用者名稱
   async function getUserDisplayName() {
     if (liff.isInClient()) {
       const profile = await liff.getProfile();
@@ -106,26 +101,25 @@
     return liff.getDecodedIDToken()?.name;
   }
 
-  // 初始化日期最小值與服務清單
   function initializeBookingForm() {
-    const today = new Date().toISOString().split('T')[0];
-    datePicker.min = today;
+    datePicker.min = new Date().toISOString().split('T')[0];
     loadServices();
   }
 
-  // 讀取服務清單並產生按鈕
+  // ── 服務清單 ──
   async function loadServices() {
     serviceOptions.innerHTML = '<small>(服務項目載入中…)</small>';
+    modalPriceList.innerHTML = '<p>載入中…</p>';
     try {
       const res = await fetch(`${BACKEND_BASE_URL}/api/services`);
       if (!res.ok) throw new Error(`讀取失敗 (${res.status})`);
-      const services = await res.json();
+      allServices = await res.json();
+      if (!Array.isArray(allServices) || allServices.length === 0)
+        throw new Error('尚無服務項目');
 
-      if (!Array.isArray(services) || services.length === 0) {
-        throw new Error('目前尚無服務項目。');
-      }
+      // 預約按鈕
       serviceOptions.innerHTML = '';
-      services.forEach(svc => {
+      allServices.forEach(svc => {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'service-button';
@@ -134,47 +128,53 @@
         btn.addEventListener('click', () => btn.classList.toggle('selected'));
         serviceOptions.appendChild(btn);
       });
+
+      // 價目表
+      modalPriceList.innerHTML =
+        '<ul>' +
+        allServices
+          .map(s => `<li><span>${s.name}</span><span>$${s.price}</span></li>`)
+          .join('') +
+        '</ul>';
     } catch (err) {
-      console.error('[Load Services] 失敗:', err);
-      serviceOptions.innerHTML = `<small style="color:red;">${err.message}</small>`;
+      console.error('[loadServices]', err);
+      const msg = `<small style="color:red;">${err.message}</small>`;
+      serviceOptions.innerHTML = msg;
+      modalPriceList.innerHTML = msg;
     }
   }
 
-  // 收集並驗證表單資料
+  // ── 表單收集 & 驗證 ──
   function collectFormData() {
-    const dateVal = datePicker.value;
-    const timeVal = timeSelect.value;
-    const selectedButtons = serviceOptions.querySelectorAll('.service-button.selected');
+    const date = datePicker.value;
+    const time = timeSelect.value;
+    const selectedBtns = serviceOptions.querySelectorAll('.service-button.selected');
 
-    if (!dateVal) throw new Error('請選擇日期。');
-    if (!timeVal) throw new Error('請選擇時段。');
-    if (selectedButtons.length === 0) throw new Error('請至少選擇一個服務項目。');
+    if (!date)  throw new Error('請選擇日期');
+    if (!time)  throw new Error('請選擇時段');
+    if (!selectedBtns.length) throw new Error('請至少選擇一項服務');
 
-    const services = Array.from(selectedButtons).map(btn => ({
+    const userId = liff.getContext()?.userId;
+    if (!userId) throw new Error('無法取得 LINE UserID，請重新登入');
+
+    const serviceIds = Array.from(selectedBtns).map(btn => ({
       id: btn.dataset.serviceId,
-      name: btn.textContent.trim(),
+      name: btn.textContent.trim()
     }));
-
-    return {
-      date: dateVal,
-      time: timeVal,
-      services,
-    };
+    return { userId, date, time, services: serviceIds };
   }
 
-  // 將預約資料送往後端
+  // ── 送出預約 ──
   async function submitBooking(payload) {
     const res = await fetch(`${BACKEND_BASE_URL}/api/bookings`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
-      const msg = (await res.json())?.error || `伺服器錯誤 (${res.status})`;
-      throw new Error(msg);
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || `伺服器錯誤 (${res.status})`);
     }
     return res.json();
   }

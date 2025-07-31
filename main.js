@@ -24,10 +24,8 @@
             try {
                 await liff.init({ liffId: liffId });
                 if (liff.isLoggedIn()) {
-                    // 對於已經登入的用戶，直接顯示預約畫面 (這是第二次進入時的流程)
                     await showBookingScreen();
                 } else {
-                    // 對於未登入的用戶，停在歡迎頁，並啟用按鈕
                     agreeButton.disabled = false;
                 }
             } catch (err) {
@@ -39,9 +37,6 @@
         function setupEventListeners() {
             agreeButton.addEventListener('click', () => {
                 if (!liff.isLoggedIn()) {
-                    // **【最終修正】**
-                    // 移除會導致問題的 redirectUri 參數，
-                    // 恢復到我們之前唯一能成功運作的無參數版本。
                     liff.login();
                 } else {
                     showBookingScreen();
@@ -85,30 +80,37 @@
             loadServices();
         }
 
+        // **【最終修正】**
+        // 將 loadServices 函式修改為呼叫您部署在 Render 上的雲端後端 API
         async function loadServices() {
             try {
-                await new Promise(resolve => setTimeout(resolve, 1000)); 
-                const services = [
-                    { id: 'cut', name: '精緻剪髮', price: 1000 },
-                    { id: 'perm', name: '日系燙髮', price: 2500 },
-                    { id: 'color', name: '質感染髮', price: 2800 },
-                ];
+                const response = await fetch('https://minyue-api.onrender.com');
                 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const services = await response.json();
+
                 serviceOptions.innerHTML = ''; 
                 
                 services.forEach(service => {
-                    const div = document.createElement('div');
-                    div.className = 'service-item';
-                    div.innerHTML = `
-                        <input type="checkbox" id="service-${service.id}" name="services" value="${service.id}">
-                        <label for="service-${service.id}">${service.name} ($${service.price})</label>
-                    `;
-                    serviceOptions.appendChild(div);
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'service-button';
+                    button.textContent = service.name;
+                    button.dataset.serviceId = service._id;
+
+                    button.addEventListener('click', () => {
+                        button.classList.toggle('selected');
+                    });
+
+                    serviceOptions.appendChild(button);
                 });
 
             } catch (err) {
                 console.error('Failed to load services:', err);
-                serviceOptions.innerHTML = '<small style="color: red;">服務項目載入失敗，請重新整理。</small>';
+                serviceOptions.innerHTML = '<small style="color: red;">服務項目載入失敗，請確認後端伺服器是否已啟動。</small>';
             }
         }
     });

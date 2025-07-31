@@ -14,7 +14,12 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
+# 取得 MongoDB 連線字串
 MONGO_URI = os.environ.get("MONGO_URI")
+
+# 【偵錯步驟】在日誌中印出我們實際讀取到的 MONGO_URI 值
+print(f"--- DEBUG: Attempting to connect with MONGO_URI: '{MONGO_URI}' ---")
+
 client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
 try:
     db = client.get_default_database() or client.minyue_db
@@ -26,8 +31,9 @@ except Exception as e:
 
 services_col = db.services
 bookings_col = db.bookings
-users_col = db.users # 新增 users collection 的變數
+users_col = db.users
 
+# (後續的程式碼保持不變)
 # -----------------------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------------------
@@ -58,12 +64,10 @@ def create_booking():
     except Exception:
         return jsonify({"error": "無效的 JSON"}), 400
 
-    # 驗證
     err_msg = _validate_booking_payload(payload)
     if err_msg:
         return jsonify({"error": err_msg}), 400
 
-    # 【重要修正】將使用者資料存入 users collection (如果不存在的話)
     user_profile = payload.get("userProfile", {})
     user_id = user_profile.get("userId")
     
@@ -78,10 +82,9 @@ def create_booking():
             upsert=True
         )
 
-    # 寫入 bookings collection
     try:
         doc = {
-            "userId": user_id, # 【重要修正】儲存客人的 userId
+            "userId": user_id,
             "date": payload["date"],
             "time": payload["time"],
             "serviceIds": payload["serviceIds"],
@@ -97,7 +100,6 @@ def create_booking():
 # Helper
 # -----------------------------------------------------------------------------
 def _validate_booking_payload(payload: dict) -> str | None:
-    # (驗證邏輯保持不變，但可以更嚴謹)
     if not payload: return "Request body is empty"
     if "userProfile" not in payload or "userId" not in payload["userProfile"]: return "缺少 userProfile.userId"
     if "date" not in payload: return "缺少 date"

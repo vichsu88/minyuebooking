@@ -1,9 +1,6 @@
-// 【Agent 建議】使用 IIFE (立即執行函式) 包裹程式碼，避免污染全域變數
 (function() {
-    // 當整個網頁的 DOM 結構都載入完成後，再執行我們的程式碼
     document.addEventListener("DOMContentLoaded", function() {
 
-        // 宣告所有會用到的 HTML 元素
         const welcomeScreen = document.getElementById('welcome-screen');
         const bookingScreen = document.getElementById('booking-screen');
         const agreeButton = document.getElementById('agreeButton');
@@ -12,14 +9,12 @@
         const datePicker = document.getElementById('date-picker');
         const serviceOptions = document.getElementById('service-options');
 
-        const liffId = "2007825302-BWYw4PK5"; // 您的 LIFF ID
+        const liffId = "2007825302-BWYw4PK5";
 
-        // 主程式進入點
         main();
 
-        // 【Agent 建議】將主程式邏輯改寫成 async/await 結構，更清晰
         async function main() {
-            agreeButton.disabled = true; // 先禁用按鈕
+            agreeButton.disabled = true;
             setupEventListeners();
             try {
                 await liff.init({ liffId: liffId });
@@ -44,8 +39,14 @@
             });
 
             bookingForm.addEventListener('submit', function(event) {
-                event.preventDefault(); // 阻止表單預設送出行為
-                alert("預約請求已送出！（此為前端測試訊息）");
+                event.preventDefault();
+                const selectedButtons = serviceOptions.querySelectorAll('.service-button.selected');
+                if (selectedButtons.length === 0) {
+                    alert('請至少選擇一個預約項目！');
+                    return;
+                }
+                const selectedServices = Array.from(selectedButtons).map(button => button.textContent);
+                alert("您選擇的服務是：" + selectedServices.join(', ') + "。（此為前端測試訊息）");
                 // TODO: 呼叫後端 API
             });
         }
@@ -82,9 +83,11 @@
 
         // **【最終修正】**
         // 將 loadServices 函式修改為呼叫您部署在 Render 上的雲端後端 API
+        // 並且恢復成我們之前做好的「服務按鈕」
         async function loadServices() {
             try {
-                const response = await fetch('https://minyue-api.onrender.com');
+                // 請將 'https://your-backend-api.onrender.com' 換成您後端服務的真實 Render 網址
+                const response = await fetch('https://minyue-api.onrender.com/');
                 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);

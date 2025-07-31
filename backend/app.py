@@ -4,7 +4,7 @@ from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pymongo import MongoClient
-from pymongo.errors import PyMongoError
+from pymongo.errors import PyMongoError, ConfigurationError
 from dotenv import load_dotenv
 
 # -----------------------------------------------------------------------------
@@ -14,20 +14,25 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 
-# 取得 MongoDB 連線字串
+# 【最終修正】加入更強的錯誤檢查
 MONGO_URI = os.environ.get("MONGO_URI")
+if not MONGO_URI:
+    # 如果在雲端環境中讀不到 MONGO_URI，這會讓部署日誌直接顯示錯誤
+    raise RuntimeError("FATAL ERROR: MONGO_URI environment variable is not set.")
 
-# 【偵錯步驟】在日誌中印出我們實際讀取到的 MONGO_URI 值
-print(f"--- DEBUG: Attempting to connect with MONGO_URI: '{MONGO_URI}' ---")
-
-client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
 try:
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
     db = client.get_default_database() or client.minyue_db
     client.admin.command("ping")
     print("✅ MongoDB connection successful.")
+except ConfigurationError as e:
+    # 這個錯誤通常代表連線字串格式不對
+    print(f"❌ MongoDB Configuration Error: Invalid URI. Please check your MONGO_URI environment variable. Details: {e}")
+    # 讓程式在部署時因錯誤而停止，而不是持續失敗重啟
+    raise e 
 except Exception as e:
     print(f"❌ MongoDB connection failed: {e}")
-    db = client.minyue_db
+    raise e
 
 services_col = db.services
 bookings_col = db.bookings
@@ -37,7 +42,6 @@ users_col = db.users
 # -----------------------------------------------------------------------------
 # Routes
 # -----------------------------------------------------------------------------
-
 @app.route("/")
 def index():
     return "茗月髮型設計 - API 伺服器已啟動！"

@@ -4,13 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>茗月髮型設計 - 預約服務</title>
-
+  
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="assets/css/style.css?v=2.2">
-</head>
+  <link rel="stylesheet" href="assets/css/style.css?v=2.3"> </head>
 <body>
 
   <div id="desktop-warning">
@@ -18,7 +17,6 @@
   </div>
 
   <main id="main-content">
-
     <div id="welcome-screen" class="container">
       <div class="content-box">
         <h1>預約流程說明</h1>
@@ -78,8 +76,27 @@
     <div class="modal-content">
       <button id="closeModalButton" class="close-button">&times;</button>
       <h2>價目表</h2>
-      <div id="modal-price-list">
+      <div id="modal-price-list"></div>
+    </div>
+  </div>
+
+  <div id="register-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <button id="closeRegisterModal" class="close-button" aria-label="關閉">&times;</button>
+      <h2>第一次使用請先完成基本資料</h2>
+      <form id="register-form">
+        <div class="form-row">
+          <label class="form-label" for="reg-phone">手機：</label>
+          <input id="reg-phone" class="form-input" type="tel" inputmode="numeric" pattern="09\d{8}" placeholder="09xxxxxxxx" required>
         </div>
+        <div class="form-row">
+          <label class="form-label" for="reg-birthday">生日：</label>
+          <input type="date" id="reg-birthday" class="form-input" required>
+        </div>
+        <div class="button-group">
+          <button type="submit" class="form-button submit">儲存</button>
+        </div>
+      </form>
     </div>
   </div>
 

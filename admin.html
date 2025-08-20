@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minyue 整合後台管理</title>
+    <style>
+        :root {
+            --primary-color: #3498db;
+            --secondary-color: #2c3e50;
+            --success-color: #2ecc71;
+            --danger-color: #e74c3c;
+            --light-gray: #f4f7f9;
+            --dark-gray: #333;
+            --border-color: #dcdfe6;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--light-gray);
+            color: var(--dark-gray);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1, h2 {
+            color: var(--secondary-color);
+            text-align: center;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+        }
+        input[type="text"], input[type="datetime-local"], input[type="date"], input[type="number"], input[type="search"], textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        .btn-success { background-color: var(--success-color); }
+        .btn-danger { background-color: var(--danger-color); }
+        .btn-secondary { background-color: #7f8c8d; }
+        
+        #admin-panel { display: none; }
+        
+        /* 導覽列樣式 */
+        .nav-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--border-color);
+        }
+        .nav-tab {
+            padding: 15px 25px;
+            cursor: pointer;
+            border: none;
+            background-color: transparent;
+            font-size: 18px;
+            color: #7f8c8d;
+        }
+        .nav-tab.active {
+            border-bottom: 3px solid var(--primary-color);
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* 通用列表樣式 */
+        .item-list { margin-top: 20px; }
+        .item-card {
+            border: 1px solid #e0e0e0;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+        }
+        .item-card p { margin: 5px 0; }
+        .item-card strong { color: #555; }
+        
+        /* 顧客管理介面 */
+        .customer-layout {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 20px;
+        }
+        #customer-list-container, #customer-detail-container {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .customer-list-item {
+            padding: 10px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .customer-list-item:hover, .customer-list-item.selected {
+            background-color: #ecf0f1;
+        }
+
+        #message-area {
+            text-align: center;
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 4px;
+            display: none;
+        }
+        .message-success { background-color: #d4edda; color: #155724; }
+        .message-error { background-color: #f8d7da; color: #721c24; }
+        .message-loading { background-color: #e2e3e5; color: #383d41; }
+
+        /* Modal 彈窗 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+        }
+        .close-btn {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Minyue 整合後台管理</h1>
+
+        <div id="auth-section" class="card">
+            <h2>請輸入 Admin Token</h2>
+            <div class="input-group">
+                <label for="admin-token">Admin Token:</label>
+                <input type="text" id="admin-token" placeholder="請貼上你的 Admin Token">
+            </div>
+            <button id="set-token-btn">進入後台</button>
+        </div>
+
+        <div id="admin-panel" class="card">
+            <div class="nav-tabs">
+                <button class="nav-tab active" data-tab="bookings">預約管理</button>
+                <button class="nav-tab" data-tab="customers">顧客管理</button>
+                <button class="nav-tab" data-tab="services">商店管理</button>
+            </div>
+            <div id="message-area"></div>
+
+            <div id="bookings-tab" class="tab-content active">
+                <h2>待處理預約</h2>
+                <button id="fetch-bookings-btn">讀取待確認的預約</button>
+                <div id="bookings-list" class="item-list"></div>
+            </div>
+
+            <div id="customers-tab" class="tab-content">
+                <div class="customer-layout">
+                    <div id="customer-list-container">
+                        <h2>顧客列表</h2>
+                        <input type="search" id="customer-search" placeholder="搜尋姓名或電話...">
+                        <button id="add-customer-btn" style="margin-top: 10px;">建立新顧客檔案</button>
+                        <div id="customer-list" class="item-list"></div>
+                    </div>
+                    <div id="customer-detail-container">
+                        <div id="customer-details">
+                            <p>請從左側選擇一位顧客來查看詳細資料。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="services-tab" class="tab-content">
+                <h2>服務項目管理</h2>
+                <button id="add-service-btn">新增服務項目</button>
+                <div id="services-list" class="item-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="form-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <div id="modal-body"></div>
+        </div>
+    </div>
+
+<script>
+// --- 設定區 ---
+const BACKEND_URL = "https://minyue-api.onrender.com";
+let adminToken = '';
+
+// --- DOM 元素 ---
+const authSection = document.getElementById('auth-section');
+const adminPanel = document.getElementById('admin-panel');
+const setTokenBtn = document.getElementById('set-token-btn');
+const adminTokenInput = document.getElementById('admin-token');
+const messageArea = document.getElementById('message-area');
+
+// --- 通用函式 ---
+function showMessage(text, type) {
+    messageArea.textContent = text;
+    messageArea.className = `message-${type}`;
+    messageArea.style.display = 'block';
+}
+function hideMessage() { messageArea.style.display = 'none'; }
+
+// API 呼叫的輔助函式
+async function apiFetch(endpoint, options = {}) {
+    options.headers = {
+        'Content-Type': 'application/json',
+        'X-Admin-Token': adminToken,
+        ...options.headers,
+    };
+    const response = await fetch(`${BACKEND_URL}${endpoint}`, options);
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: response.statusText }));
+        throw new Error(errorData.message || `伺服器錯誤: ${response.status}`);
+    }
+    return response.json();
+}
+
+// --- 驗證與導覽 ---
+setTokenBtn.addEventListener('click', () => {
+    const token = adminTokenInput.value.trim();
+    if (token) {
+        adminToken = token;
+        authSection.style.display = 'none';
+        adminPanel.style.display = 'block';
+        initAdminPanel();
+    } else { alert('請輸入 Admin Token！'); }
+});
+adminTokenInput.value = "9Jb2rQfD8mUuQ3tZKUvCw8n7vH2yP1aX";
+
+function initAdminPanel() {
+    // 預設讀取預約
+    handleFetchBookings();
+    
+    // 導覽列點擊事件
+    document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.nav-tab, .tab-content').forEach(el => el.classList.remove('active'));
+            tab.classList.add('active');
+            document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+            
+            // 切換時自動載入對應內容
+            switch(tab.dataset.tab) {
+                case 'bookings': handleFetchBookings(); break;
+                case 'customers': handleFetchCustomers(); break;
+                case 'services': handleFetchServices(); break;
+            }
+        });
+    });
+}
+
+// --- 1. 預約管理 (Booking) ---
+const fetchBookingsBtn = document.getElementById('fetch-bookings-btn');
+const bookingsList = document.getElementById('bookings-list');
+
+fetchBookingsBtn.addEventListener('click', handleFetchBookings);
+
+async function handleFetchBookings() {
+    bookingsList.innerHTML = '';
+    showMessage('讀取中，請稍候...', 'loading');
+    try {
+        const bookings = await apiFetch('/api/admin/bookings?status=pending');
+        hideMessage();
+        displayBookings(bookings);
+    } catch (error) {
+        showMessage(`讀取預約失敗: ${error.message}`, 'error');
+    }
+}
+
+function displayBookings(bookings) {
+    if (bookings.length === 0) {
+        bookingsList.innerHTML = '<p>目前沒有待確認的預約。</p>';
+        return;
+    }
+    bookingsList.innerHTML = bookings.map(b => `
+        <div class="item-card">
+            <p><strong>姓名:</strong> ${b.name}</p>
+            <p><strong>服務項目:</strong> ${b.service}</p>
+            <p><strong>聯絡電話:</strong> ${b.phone}</p>
+            <p><strong>顧客期望時間:</strong> ${new Date(b.datetime).toLocaleString('zh-TW')}</p>
+            <div class="input-group">
+                <label for="final_time_${b._id}"><strong>確認最終時間:</strong></label>
+                <input type="datetime-local" id="final_time_${b._id}">
+            </div>
+            <button class="btn-success" onclick="handleConfirmBooking('${b._id}')">確認此預約</button>
+        </div>
+    `).join('');
+}
+
+async function handleConfirmBooking(bookingId) {
+    const finalTimeInput = document.getElementById(`final_time_${bookingId}`);
+    const finalDatetime = finalTimeInput.value;
+    if (!finalDatetime) {
+        alert('請選擇一個最終確認的時間！');
+        return;
+    }
+    
+    showMessage('正在確認預約...', 'loading');
+    try {
+        await apiFetch(`/api/admin/bookings/${bookingId}/confirm`, {
+            method: 'POST',
+            body: JSON.stringify({ final_datetime: new Date(finalDatetime).toISOString() })
+        });
+        showMessage('預約已成功確認！正在重新整理列表...', 'success');
+        setTimeout(handleFetchBookings, 1500);
+    } catch (error) {
+        showMessage(`確認失敗: ${error.message}`, 'error');
+    }
+}
+
+// --- 2. 顧客管理 (Customer) ---
+// (這部分功能較複雜，需要更多函式)
+
+// --- 3. 商店管理 (Service) ---
+const addServiceBtn = document.getElementById('add-service-btn');
+const servicesList = document.getElementById('services-list');
+// (這部分函式先留空，待後續擴充)
+
+
+// --- 初始化 ---
+// 這裡可以放一些初始化的程式碼
+</script>
+
+
+</body>
+</html>

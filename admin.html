@@ -233,7 +233,7 @@
 <script>
 // --- 設定區 ---
 const BACKEND_URL = "https://minyue-api.onrender.com";
-let adminToken = '';
+let adminToken = "";
 
 // --- DOM 元素 ---
 const authSection = document.getElementById('auth-section');
@@ -242,132 +242,413 @@ const setTokenBtn = document.getElementById('set-token-btn');
 const adminTokenInput = document.getElementById('admin-token');
 const messageArea = document.getElementById('message-area');
 
-// --- 通用函式 ---
-function showMessage(text, type) {
-    messageArea.textContent = text;
-    messageArea.className = `message-${type}`;
-    messageArea.style.display = 'block';
-}
-function hideMessage() { messageArea.style.display = 'none'; }
-
-// API 呼叫的輔助函式
-async function apiFetch(endpoint, options = {}) {
-    options.headers = {
-        'Content-Type': 'application/json',
-        'X-Admin-Token': adminToken,
-        ...options.headers,
-    };
-    const response = await fetch(`${BACKEND_URL}${endpoint}`, options);
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: response.statusText }));
-        throw new Error(errorData.message || `伺服器錯誤: ${response.status}`);
-    }
-    return response.json();
-}
-
-// --- 驗證與導覽 ---
-setTokenBtn.addEventListener('click', () => {
-    const token = adminTokenInput.value.trim();
-    if (token) {
-        adminToken = token;
-        authSection.style.display = 'none';
-        adminPanel.style.display = 'block';
-        initAdminPanel();
-    } else { alert('請輸入 Admin Token！'); }
-});
-adminTokenInput.value = "9Jb2rQfD8mUuQ3tZKUvCw8n7vH2yP1aX";
-
-function initAdminPanel() {
-    // 預設讀取預約
-    handleFetchBookings();
-    
-    // 導覽列點擊事件
-    document.querySelectorAll('.nav-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.nav-tab, .tab-content').forEach(el => el.classList.remove('active'));
-            tab.classList.add('active');
-            document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
-            
-            // 切換時自動載入對應內容
-            switch(tab.dataset.tab) {
-                case 'bookings': handleFetchBookings(); break;
-                case 'customers': handleFetchCustomers(); break;
-                case 'services': handleFetchServices(); break;
-            }
-        });
-    });
-}
-
-// --- 1. 預約管理 (Booking) ---
 const fetchBookingsBtn = document.getElementById('fetch-bookings-btn');
 const bookingsList = document.getElementById('bookings-list');
 
-fetchBookingsBtn.addEventListener('click', handleFetchBookings);
+const addServiceBtn = document.getElementById('add-service-btn');
+const servicesList = document.getElementById('services-list');
 
+const customerSearchInput = document.getElementById('customer-search');
+const addCustomerBtn = document.getElementById('add-customer-btn');
+const customerList = document.getElementById('customer-list');
+const customerDetails = document.getElementById('customer-details');
+
+const formModal = document.getElementById('form-modal');
+const modalBody = document.getElementById('modal-body');
+const closeModalBtn = document.querySelector('.close-btn');
+
+// --- 通用訊息 ---
+function showMessage(text, type) {
+  messageArea.textContent = text;
+  messageArea.className = '';
+  messageArea.classList.add(`message-${type}`);
+  messageArea.style.display = 'block';
+}
+function hideMessage() { messageArea.style.display = 'none'; }
+
+// --- Modal ---
+function openModal(html) {
+  modalBody.innerHTML = html;
+  formModal.style.display = 'flex';
+}
+function closeModal() { formModal.style.display = 'none'; }
+closeModalBtn.addEventListener('click', closeModal);
+formModal.addEventListener('click', (e) => { if (e.target === formModal) closeModal(); });
+
+// --- API 輔助 ---
+async function apiFetch(endpoint, options = {}) {
+  options.headers = {
+    'Content-Type': 'application/json',
+    'X-Admin-Token': adminToken,
+    ...options.headers,
+  };
+  const res = await fetch(`${BACKEND_URL}${endpoint}`, options);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const msg = data.error || data.message || `伺服器錯誤 ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+// --- Admin Token ---
+setTokenBtn.addEventListener('click', () => {
+  const token = adminTokenInput.value.trim();
+  if (!token) { alert('請輸入 Admin Token！'); return; }
+  adminToken = token;
+  authSection.style.display = 'none';
+  adminPanel.style.display = 'block';
+  initAdminPanel();
+});
+
+// === 導覽與初始化 ===
+function initAdminPanel() {
+  // 預設讀取預約
+  handleFetchBookings();
+
+  document.querySelectorAll('.nav-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.nav-tab, .tab-content').forEach(el => el.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+
+      switch (tab.dataset.tab) {
+        case 'bookings': handleFetchBookings(); break;
+        case 'customers': handleFetchCustomers(); break;
+        case 'services': handleFetchServices(); break;
+      }
+    });
+  });
+
+  // 綁定按鈕
+  fetchBookingsBtn.addEventListener('click', handleFetchBookings);
+  addServiceBtn.addEventListener('click', openAddServiceForm);
+  addCustomerBtn.addEventListener('click', openAddCustomerForm);
+  customerSearchInput.addEventListener('input', debounce(handleFetchCustomers, 300));
+}
+
+// --- 工具：日期格式 ---
+function toDatetimeLocal(isoString) {
+  // isoString 例如 '2025-08-20T10:00:00+08:00'
+  const d = new Date(isoString);
+  const pad = n => String(n).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
+  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+}
+
+// === 1) 預約管理 ===
 async function handleFetchBookings() {
-    bookingsList.innerHTML = '';
-    showMessage('讀取中，請稍候...', 'loading');
-    try {
-        const bookings = await apiFetch('/api/admin/bookings?status=pending');
-        hideMessage();
-        displayBookings(bookings);
-    } catch (error) {
-        showMessage(`讀取預約失敗: ${error.message}`, 'error');
-    }
+  bookingsList.innerHTML = '';
+  showMessage('讀取中，請稍候...', 'loading');
+  try {
+    // 注意：路由改為 /pending（與後端一致）
+    const bookings = await apiFetch('/api/admin/bookings/pending');
+    hideMessage();
+    displayBookings(bookings);
+  } catch (err) {
+    showMessage(`讀取預約失敗：${err.message}`, 'error');
+  }
 }
 
 function displayBookings(bookings) {
-    if (bookings.length === 0) {
-        bookingsList.innerHTML = '<p>目前沒有待確認的預約。</p>';
-        return;
-    }
-    bookingsList.innerHTML = bookings.map(b => `
-        <div class="item-card">
-            <p><strong>姓名:</strong> ${b.name}</p>
-            <p><strong>服務項目:</strong> ${b.service}</p>
-            <p><strong>聯絡電話:</strong> ${b.phone}</p>
-            <p><strong>顧客期望時間:</strong> ${new Date(b.datetime).toLocaleString('zh-TW')}</p>
-            <div class="input-group">
-                <label for="final_time_${b._id}"><strong>確認最終時間:</strong></label>
-                <input type="datetime-local" id="final_time_${b._id}">
-            </div>
-            <button class="btn-success" onclick="handleConfirmBooking('${b._id}')">確認此預約</button>
+  if (!bookings.length) {
+    bookingsList.innerHTML = '<p>目前沒有待確認的預約。</p>';
+    return;
+  }
+  bookingsList.innerHTML = bookings.map(b => {
+    const customerName = (b.user && b.user.displayName) ? b.user.displayName : 'LINE 使用者';
+    const phone = (b.user && b.user.phone) ? b.user.phone : '-';
+    const svc = (b.serviceNames && b.serviceNames.length) ? b.serviceNames.join('、') : '(未取得)';
+    const when = b.startAtLocal ? new Date(b.startAtLocal).toLocaleString('zh-TW') : '-';
+    const defaultFinal = b.startAtLocal ? toDatetimeLocal(b.startAtLocal) : '';
+    return `
+      <div class="item-card">
+        <p><strong>姓名:</strong> ${customerName}</p>
+        <p><strong>服務項目:</strong> ${svc}</p>
+        <p><strong>聯絡電話:</strong> ${phone}</p>
+        <p><strong>顧客期望時間:</strong> ${when}</p>
+        <div class="input-group">
+          <label for="final_time_${b._id}"><strong>確認最終時間:</strong></label>
+          <input type="datetime-local" id="final_time_${b._id}" value="${defaultFinal}">
         </div>
-    `).join('');
+        <button class="btn-success" onclick="handleConfirmBooking('${b._id}')">確認此預約</button>
+      </div>
+    `;
+  }).join('');
 }
 
 async function handleConfirmBooking(bookingId) {
-    const finalTimeInput = document.getElementById(`final_time_${bookingId}`);
-    const finalDatetime = finalTimeInput.value;
-    if (!finalDatetime) {
-        alert('請選擇一個最終確認的時間！');
-        return;
-    }
-    
-    showMessage('正在確認預約...', 'loading');
-    try {
-        await apiFetch(`/api/admin/bookings/${bookingId}/confirm`, {
-            method: 'POST',
-            body: JSON.stringify({ final_datetime: new Date(finalDatetime).toISOString() })
-        });
-        showMessage('預約已成功確認！正在重新整理列表...', 'success');
-        setTimeout(handleFetchBookings, 1500);
-    } catch (error) {
-        showMessage(`確認失敗: ${error.message}`, 'error');
-    }
+  const input = document.getElementById(`final_time_${bookingId}`);
+  const val = input.value;
+  if (!val) { alert('請選擇一個最終確認的時間！'); return; }
+  showMessage('正在確認預約...', 'loading');
+  try {
+    await apiFetch(`/api/admin/bookings/${bookingId}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify({
+        // 後端已支援 finalStart（YYYY-MM-DDTHH:MM）
+        finalStart: val,
+        durationMins: 90
+      })
+    });
+    showMessage('預約已成功確認！', 'success');
+    setTimeout(handleFetchBookings, 1000);
+  } catch (err) {
+    showMessage(`確認失敗：${err.message}`, 'error');
+  }
 }
 
-// --- 2. 顧客管理 (Customer) ---
-// (這部分功能較複雜，需要更多函式)
+// === 2) 顧客管理 ===
+async function handleFetchCustomers() {
+  const q = (customerSearchInput.value || '').trim();
+  try {
+    const list = await apiFetch(`/api/admin/customers${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+    renderCustomerList(list);
+    customerDetails.innerHTML = '<p>請從左側選擇一位顧客來查看詳細資料。</p>';
+  } catch (err) {
+    showMessage(`讀取顧客失敗：${err.message}`, 'error');
+  }
+}
 
-// --- 3. 商店管理 (Service) ---
-const addServiceBtn = document.getElementById('add-service-btn');
-const servicesList = document.getElementById('services-list');
-// (這部分函式先留空，待後續擴充)
+function renderCustomerList(list) {
+  customerList.innerHTML = list.map(c => `
+    <div class="customer-list-item" data-id="${c._id}">
+      <div><strong>${c.name || '(未命名)'}</strong></div>
+      <div>${c.phone || '-'}</div>
+      <div>${c.birthday || ''}</div>
+    </div>
+  `).join('');
+  customerList.querySelectorAll('.customer-list-item').forEach(el => {
+    el.addEventListener('click', () => {
+      customerList.querySelectorAll('.customer-list-item').forEach(x => x.classList.remove('selected'));
+      el.classList.add('selected');
+      const id = el.getAttribute('data-id');
+      const obj = list.find(x => x._id === id);
+      renderCustomerDetails(obj);
+    });
+  });
+}
 
+function renderCustomerDetails(c) {
+  customerDetails.innerHTML = `
+    <div class="card">
+      <h3>顧客資料</h3>
+      <div class="input-group">
+        <label>姓名</label>
+        <input type="text" id="cust_name" value="${c.name || ''}">
+      </div>
+      <div class="input-group">
+        <label>手機（09開頭10碼）</label>
+        <input type="text" id="cust_phone" value="${c.phone || ''}">
+      </div>
+      <div class="input-group">
+        <label>生日</label>
+        <input type="date" id="cust_birthday" value="${c.birthday || ''}">
+      </div>
+      <div class="input-group">
+        <label>備註</label>
+        <textarea id="cust_note">${c.note || ''}</textarea>
+      </div>
+      <button class="btn-success" id="save_customer_btn">儲存</button>
+    </div>
 
-// --- 初始化 ---
-// 這裡可以放一些初始化的程式碼
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <h3>消費/染燙紀錄</h3>
+        <button class="btn-secondary" id="add_record_btn">新增紀錄</button>
+      </div>
+      <div id="hair_records"></div>
+    </div>
+  `;
+
+  document.getElementById('save_customer_btn').addEventListener('click', async () => {
+    try {
+      const body = {
+        name: document.getElementById('cust_name').value.trim(),
+        phone: document.getElementById('cust_phone').value.trim(),
+        birthday: document.getElementById('cust_birthday').value,
+        note: document.getElementById('cust_note').value
+      };
+      await apiFetch(`/api/admin/customers/${c._id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      showMessage('顧客已更新', 'success');
+      handleFetchCustomers();
+    } catch (err) {
+      showMessage(`更新失敗：${err.message}`, 'error');
+    }
+  });
+
+  document.getElementById('add_record_btn').addEventListener('click', () => openAddRecordForm(c));
+  loadHairRecords(c._id);
+}
+
+async function loadHairRecords(customerId) {
+  try {
+    const list = await apiFetch(`/api/admin/hair-records?customerId=${encodeURIComponent(customerId)}`);
+    const html = list.map(r => `
+      <div class="item-card">
+        <p><strong>日期：</strong>${r.date}</p>
+        <p><strong>項目：</strong>${Array.isArray(r.items) ? r.items.join('、') : ''}</p>
+        <p><strong>消費：</strong>$${(r.amount || 0).toLocaleString()}</p>
+        <p><strong>1劑：</strong>${r.formula1 || ''}</p>
+        <p><strong>2劑：</strong>${r.formula2 || ''}</p>
+        <p><strong>說明：</strong>${r.notes || ''}</p>
+      </div>
+    `).join('');
+    document.getElementById('hair_records').innerHTML = html || '<p>目前沒有紀錄。</p>';
+  } catch (err) {
+    showMessage(`讀取紀錄失敗：${err.message}`, 'error');
+  }
+}
+
+function openAddCustomerForm() {
+  openModal(`
+    <h3>新增顧客</h3>
+    <div class="input-group"><label>姓名</label><input id="new_c_name" type="text"></div>
+    <div class="input-group"><label>手機（09開頭10碼）</label><input id="new_c_phone" type="text" placeholder="09xxxxxxxx"></div>
+    <div class="input-group"><label>生日</label><input id="new_c_bday" type="date"></div>
+    <div class="input-group"><label>備註</label><textarea id="new_c_note"></textarea></div>
+    <button id="new_c_save" class="btn-success">建立</button>
+  `);
+  document.getElementById('new_c_save').addEventListener('click', async () => {
+    try {
+      const body = {
+        name: document.getElementById('new_c_name').value.trim(),
+        phone: document.getElementById('new_c_phone').value.trim(),
+        birthday: document.getElementById('new_c_bday').value,
+        note: document.getElementById('new_c_note').value
+      };
+      const r = await apiFetch('/api/admin/customers', { method: 'POST', body: JSON.stringify(body) });
+      showMessage('顧客已建立', 'success');
+      closeModal();
+      handleFetchCustomers();
+      // 自動選中
+      setTimeout(() => {
+        const el = customerList.querySelector(`[data-id="${r._id}"]`);
+        el && el.click();
+      }, 400);
+    } catch (err) {
+      showMessage(`建立失敗：${err.message}`, 'error');
+    }
+  });
+}
+
+function openAddRecordForm(customer) {
+  openModal(`
+    <h3>新增消費/染燙紀錄</h3>
+    <div class="input-group"><label>日期</label><input id="rec_date" type="date"></div>
+    <div class="input-group"><label>項目（以、或逗號分隔）</label><input id="rec_items" type="text" placeholder="剪髮、染髮"></div>
+    <div class="input-group"><label>消費金額</label><input id="rec_amount" type="number" min="0" step="1"></div>
+    <div class="input-group"><label>1劑</label><input id="rec_f1" type="text" placeholder="品牌/號數/比例"></div>
+    <div class="input-group"><label>2劑</label><input id="rec_f2" type="text" placeholder="品牌/號數/比例"></div>
+    <div class="input-group"><label>說明</label><textarea id="rec_notes"></textarea></div>
+    <button id="rec_save" class="btn-success">新增</button>
+  `);
+  document.getElementById('rec_save').addEventListener('click', async () => {
+    try {
+      const itemsRaw = document.getElementById('rec_items').value.trim();
+      const body = {
+        customerId: customer._id,
+        date: document.getElementById('rec_date').value,
+        items: itemsRaw ? itemsRaw.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : [],
+        amount: Number(document.getElementById('rec_amount').value || 0),
+        formula1: document.getElementById('rec_f1').value,
+        formula2: document.getElementById('rec_f2').value,
+        notes: document.getElementById('rec_notes').value
+      };
+      await apiFetch('/api/admin/hair-records', { method: 'POST', body: JSON.stringify(body) });
+      showMessage('紀錄已新增', 'success');
+      closeModal();
+      loadHairRecords(customer._id);
+    } catch (err) {
+      showMessage(`新增失敗：${err.message}`, 'error');
+    }
+  });
+}
+
+// === 3) 服務（售價）管理 ===
+async function handleFetchServices() {
+  try {
+    const list = await apiFetch('/api/admin/services');
+    servicesList.innerHTML = list.map(s => `
+      <div class="item-card" data-id="${s._id}">
+        <div class="input-group">
+          <label>名稱</label>
+          <input type="text" class="svc_name" value="${s.name}">
+        </div>
+        <div class="input-group">
+          <label>售價</label>
+          <input type="number" class="svc_price" value="${s.price}">
+        </div>
+        <div class="input-group">
+          <label>排序（小在前）</label>
+          <input type="number" class="svc_order" value="${s.display_order}">
+        </div>
+        <div class="input-group">
+          <label>啟用</label>
+          <input type="checkbox" class="svc_active" ${s.is_active ? 'checked' : ''}>
+        </div>
+        <button class="btn-success" onclick="saveService('${s._id}')">儲存</button>
+      </div>
+    `).join('');
+  } catch (err) {
+    showMessage(`讀取服務失敗：${err.message}`, 'error');
+  }
+}
+window.saveService = async function(id) {
+  const card = servicesList.querySelector(`.item-card[data-id="${id}"]`);
+  const body = {
+    name: card.querySelector('.svc_name').value.trim(),
+    price: Number(card.querySelector('.svc_price').value || 0),
+    display_order: Number(card.querySelector('.svc_order').value || 0),
+    is_active: card.querySelector('.svc_active').checked
+  };
+  try {
+    await apiFetch(`/api/admin/services/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    showMessage('服務已更新', 'success');
+    handleFetchServices();
+  } catch (err) {
+    showMessage(`更新失敗：${err.message}`, 'error');
+  }
+}
+function openAddServiceForm() {
+  openModal(`
+    <h3>新增服務項目</h3>
+    <div class="input-group"><label>名稱</label><input id="svc_new_name" type="text"></div>
+    <div class="input-group"><label>售價</label><input id="svc_new_price" type="number" min="0" step="1"></div>
+    <div class="input-group"><label>排序（小在前）</label><input id="svc_new_order" type="number" step="1" value="0"></div>
+    <div class="input-group"><label>啟用</label><input id="svc_new_active" type="checkbox" checked></div>
+    <button id="svc_new_save" class="btn-success">建立</button>
+  `);
+  document.getElementById('svc_new_save').addEventListener('click', async () => {
+    const body = {
+      name: document.getElementById('svc_new_name').value.trim(),
+      price: Number(document.getElementById('svc_new_price').value || 0),
+      display_order: Number(document.getElementById('svc_new_order').value || 0),
+      is_active: document.getElementById('svc_new_active').checked
+    };
+    try {
+      await apiFetch('/api/admin/services', { method: 'POST', body: JSON.stringify(body) });
+      showMessage('服務已新增', 'success');
+      closeModal();
+      handleFetchServices();
+    } catch (err) {
+      showMessage(`新增失敗：${err.message}`, 'error');
+    }
+  });
+}
+
+// --- 小工具：防抖 ---
+function debounce(fn, wait=300) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), wait);
+  };
+}
 </script>
 
 

@@ -66,6 +66,7 @@ SALON_ADDRESS = os.environ.get("SALON_ADDRESS", "")
 # Admin 與 Cron 安全
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 CRON_SECRET = os.environ.get("CRON_SECRET")
+MAX_ATTEMPTS = 5 # Cron 重試上限
 
 # 建議索引（可重複呼叫）
 try:
@@ -368,10 +369,67 @@ def upsert_user():
 @app.route("/api/admin/bookings/pending", methods=["GET"])
 @require_admin
 def admin_list_pending_bookings():
+    """
+    回傳待處理預約（含顧客姓名/電話、服務名稱列表），只列出尚未開始的。
+    """
     now_utc = datetime.utcnow()
     q = {"status": "pending", "startAt": {"$gte": now_utc}}
     cur = bookings_col.find(q).sort("startAt", 1)
-    data = [_json_booking(b) for b in cur]
+    bookings = list(cur)
+
+    # 蒐集 userId 與 serviceIds 做一次性查詢
+    user_ids = {b.get("userId") for b in bookings if b.get("userId")}
+    svc_oid_set = set()
+    for b in bookings:
+        for sid in b.get("serviceIds", []):
+            if isinstance(sid, ObjectId):
+                svc_oid_set.add(sid)
+            else:
+                # 兼容萬一資料庫裡是字串
+                try:
+                    svc_oid_set.add(ObjectId(sid))
+                except Exception:
+                    pass
+
+    users_map = {
+        u["userId"]: {
+            "displayName": u.get("displayName"),
+            "phone": u.get("phone")
+        }
+        for u in users_col.find(
+            {"userId": {"$in": list(user_ids)}},
+            {"_id": 0, "userId": 1, "displayName": 1, "phone": 1}
+        )
+    }
+
+    services_map = {
+        s["_id"]: s.get("name")
+        for s in services_col.find(
+            {"_id": {"$in": list(svc_oid_set)}},
+            {"_id": 1, "name": 1}
+        )
+    }
+
+    def enrich(doc):
+        base = _json_booking(doc)
+        # 顧客資訊
+        u = users_map.get(doc.get("userId"), {})
+        base["user"] = u  # {displayName, phone}
+        # 服務名稱
+        names = []
+        for sid in doc.get("serviceIds", []):
+            if not isinstance(sid, ObjectId):
+                try:
+                    sid = ObjectId(sid)
+                except Exception:
+                    continue
+            n = services_map.get(sid)
+            if n:
+                names.append(n)
+        base["serviceNames"] = names
+        return base
+
+    data = [enrich(b) for b in bookings]
     return jsonify(data), 200
 
 @app.route("/api/admin/bookings/<bid>/confirm", methods=["POST"])
@@ -379,8 +437,10 @@ def admin_list_pending_bookings():
 def admin_confirm_booking(bid):
     """
     Body:
-    - finalStart: "YYYY-MM-DDTHH:MM"  (優先)
-      或 finalDate: "YYYY-MM-DD" + finalTime: "HH:MM"
+    - 可用下列任一方式提供最終開始時間（優先順序由上而下）：
+      1) finalStart: "YYYY-MM-DDTHH:MM"  (台北時間)
+      2) final_datetime: ISO 8601，如 "2025-08-20T10:30:00.000Z"
+      3) finalDate: "YYYY-MM-DD" + finalTime: "HH:MM"
     - durationMins: 預設 90
     """
     try:
@@ -388,10 +448,18 @@ def admin_confirm_booking(bid):
     except Exception:
         return jsonify({"error": "無效的 JSON"}), 400
 
-    duration = int(data.get("durationMins", 90))
-    final_start_str = data.get("finalStart")
-    final_date = data.get("finalDate")
-    final_time = data.get("finalTime")
+    # duration 驗證
+    try:
+        duration = int(data.get("durationMins", 90))
+        if duration <= 0 or duration > 8 * 60:
+            return jsonify({"error": "不合法的 durationMins"}), 400
+    except Exception:
+        return jsonify({"error": "不合法的 durationMins"}), 400
+
+    final_start_str = (data.get("finalStart") or "").strip()
+    final_datetime_iso = (data.get("final_datetime") or "").strip()
+    final_date = (data.get("finalDate") or "").strip()
+    final_time = (data.get("finalTime") or "").strip()
 
     try:
         b = bookings_col.find_one({"_id": ObjectId(bid)})
@@ -400,20 +468,33 @@ def admin_confirm_booking(bid):
         if b.get("status") not in ("pending", "confirmed"):
             return jsonify({"error": "此預約狀態不可確認"}), 400
 
+        # 1) finalStart: "YYYY-MM-DDTHH:MM"（視為 Asia/Taipei）
+        final_start_local = None
         if final_start_str:
-            # "YYYY-MM-DDTHH:MM"
             if "T" not in final_start_str:
-                return jsonify({"error": "finalStart 格式需為 YYYY-MM-DDTHH:MM"}), 400
+                return jsonify({"error": "finalStart 需為 YYYY-MM-DDTHH:MM"}), 400
             ymd, hm = final_start_str.split("T")
             y, m, d = map(int, ymd.split("-"))
             hh, mm = map(int, hm.split(":"))
+            final_start_local = datetime(y, m, d, hh, mm, tzinfo=TAIPEI)
+
+        # 2) final_datetime: ISO 8601（允許 Z）
+        elif final_datetime_iso:
+            try:
+                iso = final_datetime_iso.replace("Z", "+00:00")
+                dt_aware = datetime.fromisoformat(iso)
+                final_start_local = dt_aware.astimezone(TAIPEI)
+            except Exception:
+                return jsonify({"error": "final_datetime 格式不合法（需 ISO 8601）"}), 400
+
+        # 3) finalDate + finalTime
         else:
             if not final_date or not final_time:
-                return jsonify({"error": "需提供 finalStart 或 finalDate+finalTime"}), 400
+                return jsonify({"error": "需提供 finalStart 或 final_datetime 或 finalDate+finalTime"}), 400
             y, m, d = map(int, final_date.split("-"))
             hh, mm = map(int, final_time.split(":"))
+            final_start_local = datetime(y, m, d, hh, mm, tzinfo=TAIPEI)
 
-        final_start_local = datetime(y, m, d, hh, mm, tzinfo=TAIPEI)
         final_end_local = final_start_local + timedelta(minutes=duration)
 
         # 建立 Google Calendar 事件
@@ -428,7 +509,10 @@ def admin_confirm_booking(bid):
             f"電話：{user.get('phone') or ''}",
             f"項目：{svc_names}",
         ]
-        event_id, event_link = create_calendar_event(summary, "\n".join(desc_lines), final_start_local, final_end_local)
+        try:
+            event_id, event_link = create_calendar_event(summary, "\n".join(desc_lines), final_start_local, final_end_local)
+        except Exception as e:
+            return jsonify({"error": f"建立行事曆事件失敗：{e}"}), 500
 
         # 寫回 bookings（時間以 UTC naive 存）
         bookings_col.update_one(
@@ -577,6 +661,75 @@ def admin_list_hair_records():
         data.append(r)
     return jsonify(data), 200
 
+# 服務管理（Admin）
+@app.route("/api/admin/services", methods=["GET"])
+@require_admin
+def admin_list_services():
+    cur = services_col.find({}, {"name": 1, "price": 1, "is_active": 1, "display_order": 1}).sort("display_order", 1)
+    data = [
+        {"_id": str(s["_id"]), "name": s.get("name", ""), "price": int(s.get("price", 0)),
+         "is_active": bool(s.get("is_active", True)), "display_order": int(s.get("display_order", 0))}
+        for s in cur
+    ]
+    return jsonify(data), 200
+
+@app.route("/api/admin/services", methods=["POST"])
+@require_admin
+def admin_create_service():
+    d = request.get_json(force=True) or {}
+    name = (d.get("name") or "").strip()
+    try:
+        price = int(d.get("price", 0))
+        display_order = int(d.get("display_order", 0))
+    except Exception:
+        return jsonify({"error": "price/display_order 需為整數"}), 400
+    is_active = bool(d.get("is_active", True))
+    if not name:
+        return jsonify({"error": "name 必填"}), 400
+
+    doc = {
+        "name": name,
+        "price": price,
+        "display_order": display_order,
+        "is_active": is_active,
+        "createdAt": datetime.utcnow(),
+        "updatedAt": datetime.utcnow()
+    }
+    sid = services_col.insert_one(doc).inserted_id
+    return jsonify({"_id": str(sid)}), 201
+
+@app.route("/api/admin/services/<sid>", methods=["PATCH"])
+@require_admin
+def admin_update_service(sid):
+    d = request.get_json(force=True) or {}
+    update = {}
+    if "name" in d:
+        name = (d.get("name") or "").strip()
+        if not name:
+            return jsonify({"error": "name 不可為空"}), 400
+        update["name"] = name
+    if "price" in d:
+        try:
+            update["price"] = int(d.get("price"))
+        except Exception:
+            return jsonify({"error": "price 需為整數"}), 400
+    if "display_order" in d:
+        try:
+            update["display_order"] = int(d.get("display_order"))
+        except Exception:
+            return jsonify({"error": "display_order 需為整數"}), 400
+    if "is_active" in d:
+        update["is_active"] = bool(d.get("is_active"))
+
+    if not update:
+        return jsonify({"error": "沒有可更新欄位"}), 400
+
+    try:
+        services_col.update_one({"_id": ObjectId(sid)}, {"$set": {**update, "updatedAt": datetime.utcnow()}})
+        return jsonify({"ok": True}), 200
+    except Exception:
+        return jsonify({"error": "不合法的服務 ID"}), 400
+
 # Cron：派送提醒
 @app.route("/api/admin/cron/dispatch", methods=["GET", "POST"])
 def cron_dispatch():
@@ -609,11 +762,16 @@ def cron_dispatch():
                 {"$set": {"status": "sent", "sentAt": datetime.utcnow(), "updatedAt": datetime.utcnow()}}
             )
         else:
-            # 簡單重試：狀態改回 scheduled，attempts +1
-            reminders_col.update_one(
-                {"_id": r["_id"]},
-                {"$inc": {"attempts": 1}, "$set": {"status": "scheduled", "updatedAt": datetime.utcnow()}}
-            )
+            if r.get("attempts", 0) + 1 >= MAX_ATTEMPTS:
+                reminders_col.update_one(
+                    {"_id": r["_id"]},
+                    {"$set": {"status": "failed", "updatedAt": datetime.utcnow()}, "$inc": {"attempts": 1}}
+                )
+            else:
+                reminders_col.update_one(
+                    {"_id": r["_id"]},
+                    {"$inc": {"attempts": 1}, "$set": {"status": "scheduled", "updatedAt": datetime.utcnow()}}
+                )
         processed += 1
 
     return jsonify({"ok": True, "processed": processed}), 200

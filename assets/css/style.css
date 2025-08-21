@@ -1,9 +1,10 @@
-/* style.css – 茗月髮型設計預約系統 (v2.2)
-   ==========================================
+/* style.css – 茗月髮型設計預約系統 (v2.3 - 背景透明化修改)
+   ========================================================
    • 手機優先排版
    • 變數統一品牌色
    • 新增價目表 Modal 樣式
-   ========================================== */
+   • 移除 .content-box 和 .form-input 的白色背景
+   ======================================================== */
 
 /* ---------- 變數 ---------- */
 :root {
@@ -53,10 +54,10 @@ body::before {
 
 /* ---------- 歡迎 Box ---------- */
 .content-box {
-  background: rgba(255, 255, 255, .85);
+  background: transparent; /* [修改] 移除白色背景 */
   padding: 30px;
   border-radius: 15px;
-  box-shadow: 0 4px 15px rgba(0,0,0,.1);
+  box-shadow: none; /* [修改] 移除陰影 */
   text-align: center;
 }
 
@@ -121,13 +122,13 @@ p { line-height: 1.6; margin: 0 0 30px; }
   flex: 1;
   height: 48px;
   padding: 12px 15px;
-  border: 1px solid rgba(255,255,255,.5);
+  border: 1px solid var(--brand-purple-mid); /* [修改] 加深邊框顏色 */
   border-radius: 25px;
   font-size: 1rem;
-  background: rgba(255,255,255,.4);
-  box-shadow: -5px 5px 5px #fff inset,
-              5px -5px 5px rgba(224,178,146,.25) inset;
+  background: transparent; /* [修改] 移除輸入框背景 */
+  box-shadow: none; /* [修改] 移除輸入框陰影 */
   appearance: none;
+  color: var(--text-dark); /* 確保文字顏色可見 */
 }
 
 select.form-input {

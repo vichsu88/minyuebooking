@@ -16,28 +16,26 @@ from dotenv import load_dotenv
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 # LINE push
 from linebot import LineBotApi
 from linebot.models import TextSendMessage
 from linebot.exceptions import LineBotApiError
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 # Initialization
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 load_dotenv()
 app = Flask(__name__)
 
-# CORS：以環境變數設定白名單，開發期可用 "*"；正式上線請收斂
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*")
 origins = [o.strip() for o in ALLOWED_ORIGINS.split(",")] if ALLOWED_ORIGINS != "*" else "*"
 CORS(app, resources={r"/api/*": {"origins": origins}})
 
-# MongoDB
 MONGO_URI = os.environ.get("MONGO_URI")
 if not MONGO_URI:
     raise RuntimeError("FATAL: MONGO_URI is not set.")
-
 client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
 db = client.minyue_db
 client.admin.command("ping")
@@ -49,26 +47,22 @@ customers_col = db.customers
 hair_records_col = db.hair_records
 reminders_col = db.reminders
 
-# 時區
 TAIPEI = ZoneInfo("Asia/Taipei")
 
-# LINE
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN) if LINE_CHANNEL_ACCESS_TOKEN else None
 
-# Google OAuth（用 refresh token 長期換取存取權）
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = os.environ.get("GOOGLE_REFRESH_TOKEN")
 GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "primary")
 SALON_ADDRESS = os.environ.get("SALON_ADDRESS", "")
 
-# Admin 與 Cron 安全
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 CRON_SECRET = os.environ.get("CRON_SECRET")
-MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "5"))  # Cron 重試上限
+MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "5"))
 
-# 建議索引（可重複呼叫）
+# 索引
 try:
     users_col.create_index("userId", unique=True)
     services_col.create_index([("is_active", 1), ("display_order", 1)])
@@ -76,25 +70,23 @@ try:
     bookings_col.create_index([("status", 1), ("finalStartAt", 1)])
     reminders_col.create_index([("status", 1), ("dueAt", 1)])
     customers_col.create_index("phone", unique=False)
-    customers_col.create_index("lineUserId", unique=False)  # 新增：以 LINE ID 映射顧客
+    customers_col.create_index("lineUserId", unique=False)
     hair_records_col.create_index([("userId", 1), ("customerId", 1), ("date", 1)])
 except Exception:
     pass
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 # Utilities
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 def _is_valid_object_id(s: str) -> bool:
     return bool(re.fullmatch(r"[0-9a-fA-F]{24}", s))
 
 def _to_utc_naive(dt_aware):
-    """tz-aware -> UTC naive（存 DB 用，避免 PyMongo aware/naive 混用問題）"""
     if dt_aware is None:
         return None
     return dt_aware.astimezone(timezone.utc).replace(tzinfo=None)
 
 def _to_local(dt_utc_naive):
-    """UTC naive -> Asia/Taipei aware（回應/運算用）"""
     if dt_utc_naive is None:
         return None
     return dt_utc_naive.replace(tzinfo=timezone.utc).astimezone(TAIPEI)
@@ -102,13 +94,11 @@ def _to_local(dt_utc_naive):
 def _iso_or_none(dt):
     if not dt:
         return None
-    # 若是 naive 視為 UTC
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc).isoformat()
     return dt.isoformat()
 
 def _json_booking(doc: dict) -> dict:
-    """將 bookings 文件安全輸出（避免 datetime 直接丟 jsonify 出錯）"""
     return {
         "_id": str(doc.get("_id")),
         "userId": doc.get("userId"),
@@ -116,9 +106,9 @@ def _json_booking(doc: dict) -> dict:
         "time": doc.get("time"),
         "serviceIds": [str(x) for x in doc.get("serviceIds", [])],
         "status": doc.get("status"),
-        "startAt": _iso_or_none(doc.get("startAt")),               # UTC
+        "startAt": _iso_or_none(doc.get("startAt")),
         "startAtLocal": _iso_or_none(_to_local(doc.get("startAt"))),
-        "finalStartAt": _iso_or_none(doc.get("finalStartAt")),     # UTC
+        "finalStartAt": _iso_or_none(doc.get("finalStartAt")),
         "finalStartAtLocal": _iso_or_none(_to_local(doc.get("finalStartAt"))),
         "finalEndAt": _iso_or_none(doc.get("finalEndAt")),
         "finalEndAtLocal": _iso_or_none(_to_local(doc.get("finalEndAt"))),
@@ -150,7 +140,7 @@ def verify_cron() -> bool:
     token = request.args.get("token") or request.headers.get("X-Cron-Token")
     return bool(token and CRON_SECRET and token == CRON_SECRET)
 
-# 將 users 資料同步/建立到 customers（顯示 LINE 名稱、方便後台管理）
+# 同步 users -> customers
 def _sync_customer_from_user(user_id: str):
     u = users_col.find_one({"userId": user_id})
     if not u:
@@ -161,14 +151,13 @@ def _sync_customer_from_user(user_id: str):
             "$set": {
                 "lineUserId": user_id,
                 "lineDisplayName": u.get("displayName"),
+                "phone": u.get("phone") or "",
+                "birthday": u.get("birthday") or "",
                 "updatedAt": datetime.utcnow(),
             },
             "$setOnInsert": {
-                # 第一次建立時帶入 phone/birthday；name 先用 LINE 名稱，可於後台更改
                 "name": u.get("displayName") or "",
                 "nickname": "",
-                "phone": u.get("phone") or "",
-                "birthday": u.get("birthday") or "",
                 "note": "",
                 "createdAt": datetime.utcnow(),
             },
@@ -176,9 +165,9 @@ def _sync_customer_from_user(user_id: str):
         upsert=True,
     )
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 # Google Calendar helpers
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 def _calendar_service():
     if not (GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and GOOGLE_REFRESH_TOKEN):
         raise RuntimeError("Google OAuth 環境變數未設定完全")
@@ -195,10 +184,6 @@ def _calendar_service():
     return build("calendar", "v3", credentials=creds)
 
 def create_calendar_event(summary: str, description: str, start_local, end_local):
-    """
-    start_local/end_local: tz-aware Asia/Taipei
-    回傳 (event_id, htmlLink)
-    """
     svc = _calendar_service()
     body = {
         "summary": summary,
@@ -210,9 +195,9 @@ def create_calendar_event(summary: str, description: str, start_local, end_local
     ev = svc.events().insert(calendarId=GOOGLE_CALENDAR_ID, body=body, sendUpdates="none").execute()
     return ev.get("id"), ev.get("htmlLink")
 
-# -----------------------------------------------------------------------------
-# LINE push helper
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
+# LINE push
+# ----------------------------------------------------------------------------- #
 def send_line_push(user_id: str, message: str) -> bool:
     if not line_bot_api:
         print("[LINE] LINE_CHANNEL_ACCESS_TOKEN 未設定，跳過推播")
@@ -224,9 +209,9 @@ def send_line_push(user_id: str, message: str) -> bool:
         print(f"[LINE] push error: {e}")
         return False
 
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 # Validators
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 def _validate_booking_payload(payload: dict) -> Optional[str]:
     if not payload:
         return "Request body is empty"
@@ -248,7 +233,6 @@ def _validate_booking_payload(payload: dict) -> Optional[str]:
     if not all(isinstance(x, str) and _is_valid_object_id(x) for x in svc_ids):
         return "serviceIds 需為合法的 24 hex ObjectId 字串"
 
-    # 禁止預約在「現在」之前
     try:
         y, m, d = map(int, date.split("-"))
         hh, mm = map(int, time.split(":"))
@@ -260,9 +244,9 @@ def _validate_booking_payload(payload: dict) -> Optional[str]:
 
     return None
 
-# -----------------------------------------------------------------------------
-# Routes - Public
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
+# Public Routes
+# ----------------------------------------------------------------------------- #
 @app.route("/")
 def index():
     return "茗月髮型設計 - API 伺服器已啟動！"
@@ -274,17 +258,13 @@ def get_services():
             {"is_active": True},
             {"name": 1, "price": 1, "display_order": 1}
         ).sort("display_order", 1)
-        services = [
-            {"_id": str(s["_id"]), "name": s["name"], "price": s.get("price", 0)}
-            for s in cursor
-        ]
+        services = [{"_id": str(s["_id"]), "name": s["name"], "price": s.get("price", 0)} for s in cursor]
         return jsonify(services), 200
     except PyMongoError as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route("/api/bookings", methods=["POST"])
 def create_booking():
-    # 前台送出：pending
     try:
         payload = request.get_json(force=True)
     except Exception:
@@ -298,9 +278,9 @@ def create_booking():
     user_id = up["userId"]
     date = payload["date"]
     time = payload["time"]
-    svc_ids = list(dict.fromkeys(payload["serviceIds"]))  # 去重保序
+    svc_ids = list(dict.fromkeys(payload["serviceIds"]))
 
-    # upsert 使用者（同步 displayName/pictureUrl）
+    # upsert 使用者
     users_col.update_one(
         {"userId": user_id},
         {
@@ -313,22 +293,20 @@ def create_booking():
         },
         upsert=True,
     )
-    # 同步到 customers（確保顧客管理可見）
+    # 同步到 customers
     _sync_customer_from_user(user_id)
 
-    # 驗證服務存在且啟用
+    # 驗證服務
     svc_oids = [ObjectId(x) for x in svc_ids]
     found = list(services_col.find({"_id": {"$in": svc_oids}, "is_active": True}, {"_id": 1}))
     if len(found) != len(svc_oids):
         return jsonify({"error": "包含不存在或未啟用的服務項目"}), 400
 
-    # 建立 startAt（存 UTC naive）
     y, m, d = map(int, date.split("-"))
     hh, mm = map(int, time.split(":"))
     start_local = datetime(y, m, d, hh, mm, tzinfo=TAIPEI)
     start_utc_naive = _to_utc_naive(start_local)
 
-    # 阻擋同一 user 同時段重複 pending/confirmed
     dup = bookings_col.find_one({
         "userId": user_id,
         "startAt": start_utc_naive,
@@ -338,7 +316,7 @@ def create_booking():
         return jsonify({"error": "同一時段已有未完成的預約"}), 409
 
     try:
-        doc = {
+        rid = bookings_col.insert_one({
             "userId": user_id,
             "date": date,
             "time": time,
@@ -347,13 +325,11 @@ def create_booking():
             "status": "pending",
             "createdAt": datetime.utcnow(),
             "updatedAt": datetime.utcnow(),
-        }
-        rid = bookings_col.insert_one(doc).inserted_id
+        }).inserted_id
         return jsonify({"_id": str(rid), "status": "pending"}), 201
     except PyMongoError as e:
         return jsonify({"error": str(e)}), 500
 
-# 新客註冊 / 檢查
 @app.route("/api/users/check", methods=["GET"])
 def check_user():
     user_id = request.args.get("userId")
@@ -389,27 +365,21 @@ def upsert_user():
         {"$set": update, "$setOnInsert": {"createdAt": datetime.utcnow()}},
         upsert=True
     )
-    # 同步到 customers（註冊/更新後）
     _sync_customer_from_user(user_id)
 
     user = users_col.find_one({"userId": user_id}, {"_id": 0})
     return jsonify(user), 200
 
-# -----------------------------------------------------------------------------
-# Routes - Admin
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
+# Admin Routes
+# ----------------------------------------------------------------------------- #
 @app.route("/api/admin/bookings/pending", methods=["GET"])
 @require_admin
 def admin_list_pending_bookings():
-    """
-    回傳待處理預約（含顧客姓名/電話、服務名稱列表），只列出尚未開始的。
-    """
     now_utc = datetime.utcnow()
-    q = {"status": "pending", "startAt": {"$gte": now_utc}}
-    cur = bookings_col.find(q).sort("startAt", 1)
+    cur = bookings_col.find({"status": "pending", "startAt": {"$gte": now_utc}}).sort("startAt", 1)
     bookings = list(cur)
 
-    # 蒐集 userId 與 serviceIds 做一次性查詢
     user_ids = {b.get("userId") for b in bookings if b.get("userId")}
     svc_oid_set = set()
     for b in bookings:
@@ -426,7 +396,6 @@ def admin_list_pending_bookings():
             {"_id": 0, "userId": 1, "displayName": 1, "phone": 1}
         )
     }
-
     services_map = {
         s["_id"]: s.get("name")
         for s in services_col.find({"_id": {"$in": list(svc_oid_set)}}, {"_id": 1, "name": 1})
@@ -434,9 +403,8 @@ def admin_list_pending_bookings():
 
     def enrich(doc):
         base = _json_booking(doc)
-        u = users_map.get(doc.get("userId"), {})
-        base["user"] = u  # {displayName, phone}
-        names = []
+        base["user"] = users_map.get(doc.get("userId"), {})
+        base["serviceNames"] = []
         for sid in doc.get("serviceIds", []):
             try:
                 key = ObjectId(sid) if not isinstance(sid, ObjectId) else sid
@@ -444,30 +412,19 @@ def admin_list_pending_bookings():
                 continue
             n = services_map.get(key)
             if n:
-                names.append(n)
-        base["serviceNames"] = names
+                base["serviceNames"].append(n)
         return base
 
-    data = [enrich(b) for b in bookings]
-    return jsonify(data), 200
+    return jsonify([enrich(b) for b in bookings]), 200
 
 @app.route("/api/admin/bookings/<bid>/confirm", methods=["POST"])
 @require_admin
 def admin_confirm_booking(bid):
-    """
-    Body:
-    - 可用下列任一方式提供最終開始時間（優先順序由上而下）：
-      1) finalStart: "YYYY-MM-DDTHH:MM"  (台北時間)
-      2) final_datetime: ISO 8601，如 "2025-08-20T10:30:00.000Z"
-      3) finalDate: "YYYY-MM-DD" + finalTime: "HH:MM"
-    - durationMins: 預設 90
-    """
     try:
         data = request.get_json(force=True)
     except Exception:
         return jsonify({"error": "無效的 JSON"}), 400
 
-    # duration 驗證
     try:
         duration = int(data.get("durationMins", 90))
         if duration <= 0 or duration > 8 * 60:
@@ -487,7 +444,6 @@ def admin_confirm_booking(bid):
         if b.get("status") not in ("pending", "confirmed"):
             return jsonify({"error": "此預約狀態不可確認"}), 400
 
-        # 1) finalStart: "YYYY-MM-DDTHH:MM"（視為 Asia/Taipei）
         final_start_local = None
         if final_start_str:
             if "T" not in final_start_str:
@@ -496,7 +452,6 @@ def admin_confirm_booking(bid):
             y, m, d = map(int, ymd.split("-"))
             hh, mm = map(int, hm.split(":"))
             final_start_local = datetime(y, m, d, hh, mm, tzinfo=TAIPEI)
-        # 2) final_datetime: ISO 8601（允許 Z）
         elif final_datetime_iso:
             try:
                 iso = final_datetime_iso.replace("Z", "+00:00")
@@ -504,7 +459,6 @@ def admin_confirm_booking(bid):
                 final_start_local = dt_aware.astimezone(TAIPEI)
             except Exception:
                 return jsonify({"error": "final_datetime 格式不合法（需 ISO 8601）"}), 400
-        # 3) finalDate + finalTime
         else:
             if not final_date or not final_time:
                 return jsonify({"error": "需提供 finalStart 或 final_datetime 或 finalDate+finalTime"}), 400
@@ -514,7 +468,6 @@ def admin_confirm_booking(bid):
 
         final_end_local = final_start_local + timedelta(minutes=duration)
 
-        # 建立 Google Calendar 事件
         user = users_col.find_one({"userId": b.get("userId")}) or {}
         svc_docs = list(services_col.find({"_id": {"$in": b.get("serviceIds", [])}}, {"name": 1}))
         svc_names = "、".join([s.get("name", "") for s in svc_docs]) or "服務"
@@ -527,13 +480,14 @@ def admin_confirm_booking(bid):
             f"項目：{svc_names}",
         ]
         try:
-            event_id, event_link = create_calendar_event(
-                summary, "\n".join(desc_lines), final_start_local, final_end_local
-            )
+            event_id, event_link = create_calendar_event(summary, "\n".join(desc_lines),
+                                                         final_start_local, final_end_local)
+        except HttpError as he:
+            # 回傳更明確的診斷
+            return jsonify({"error": f"建立行事曆事件失敗（HttpError）: {he}"}), 500
         except Exception as e:
-            return jsonify({"error": f"建立行事曆事件失敗：{e}"}), 500
+            return jsonify({"error": f"建立行事曆事件失敗: {e}"}), 500
 
-        # 寫回 bookings（時間以 UTC naive 存）
         bookings_col.update_one(
             {"_id": ObjectId(bid)},
             {"$set": {
@@ -546,7 +500,6 @@ def admin_confirm_booking(bid):
             }}
         )
 
-        # 建立提醒（預約前 2 小時）
         due_local = final_start_local - timedelta(hours=2)
         reminder_id = None
         if due_local > datetime.now(tz=TAIPEI):
@@ -556,20 +509,15 @@ def admin_confirm_booking(bid):
                 "userId": b.get("userId"),
                 "channel": "line",
                 "message": msg,
-                "dueAt": _to_utc_naive(due_local),  # 存 UTC naive
+                "dueAt": _to_utc_naive(due_local),
                 "status": "scheduled",
                 "attempts": 0,
                 "createdAt": datetime.utcnow(),
                 "updatedAt": datetime.utcnow()
             }).inserted_id
-
             bookings_col.update_one({"_id": ObjectId(bid)}, {"$set": {"reminderId": reminder_id}})
 
-        return jsonify({
-            "ok": True,
-            "calendarHtmlLink": event_link,
-            "reminderCreated": bool(reminder_id)
-        }), 200
+        return jsonify({"ok": True, "calendarHtmlLink": event_link, "reminderCreated": bool(reminder_id)}), 200
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -584,8 +532,8 @@ def admin_list_customers():
         q["$or"] = [
             {"name": {"$regex": keyword, "$options": "i"}},
             {"phone": {"$regex": keyword}},
-            {"lineDisplayName": {"$regex": keyword, "$options": "i"}},  # 支援用 LINE 名稱找
-            {"nickname": {"$regex": keyword, "$options": "i"}},         # 支援用暱稱找
+            {"lineDisplayName": {"$regex": keyword, "$options": "i"}},
+            {"nickname": {"$regex": keyword, "$options": "i"}},
         ]
     cur = customers_col.find(q).sort("updatedAt", -1).limit(200)
     data = []
@@ -605,7 +553,7 @@ def admin_create_customer():
         return jsonify({"error": "姓名必填，電話需 09 開頭共10碼"}), 400
     doc = {
         "name": name,
-        "nickname": d.get("nickname", ""),  # 新增：店內暱稱
+        "nickname": d.get("nickname", ""),
         "phone": phone,
         "birthday": birthday,
         "note": d.get("note", ""),
@@ -620,7 +568,7 @@ def admin_create_customer():
 def admin_update_customer(cid):
     d = request.get_json(force=True)
     update = {}
-    for k in ["name", "nickname", "phone", "birthday", "note"]:  # 允許更新暱稱
+    for k in ["name", "nickname", "phone", "birthday", "note"]:
         if k in d:
             update[k] = d[k]
     if not update:
@@ -630,6 +578,17 @@ def admin_update_customer(cid):
         return jsonify({"ok": True}), 200
     except Exception:
         return jsonify({"error": "不合法的顧客 ID"}), 400
+
+# 一鍵回填：把所有 users 同步到 customers（解決舊客沒出現）
+@app.route("/api/admin/customers/sync-users", methods=["POST"])
+@require_admin
+def admin_sync_users_to_customers():
+    count = 0
+    for u in users_col.find({}, {"userId": 1}):
+        if u.get("userId"):
+            _sync_customer_from_user(u["userId"])
+            count += 1
+    return jsonify({"ok": True, "synced": count}), 200
 
 # 染燙/消費紀錄
 @app.route("/api/admin/hair-records", methods=["POST"])
@@ -646,7 +605,7 @@ def admin_create_hair_record():
     items = d.get("items") or []
     amount = int(d.get("amount", 0))
 
-    doc = {
+    rid = hair_records_col.insert_one({
         "userId": user_id,
         "customerId": ObjectId(customer_id) if customer_id else None,
         "date": date,
@@ -657,8 +616,7 @@ def admin_create_hair_record():
         "notes": d.get("notes", ""),
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow()
-    }
-    rid = hair_records_col.insert_one(doc).inserted_id
+    }).inserted_id
     return jsonify({"_id": str(rid)}), 201
 
 @app.route("/api/admin/hair-records", methods=["GET"])
@@ -683,7 +641,7 @@ def admin_list_hair_records():
         data.append(r)
     return jsonify(data), 200
 
-# 服務管理（Admin）
+# 服務管理
 @app.route("/api/admin/services", methods=["GET"])
 @require_admin
 def admin_list_services():
@@ -709,15 +667,14 @@ def admin_create_service():
     if not name:
         return jsonify({"error": "name 必填"}), 400
 
-    doc = {
+    sid = services_col.insert_one({
         "name": name,
         "price": price,
         "display_order": display_order,
         "is_active": is_active,
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow()
-    }
-    sid = services_col.insert_one(doc).inserted_id
+    }).inserted_id
     return jsonify({"_id": str(sid)}), 201
 
 @app.route("/api/admin/services/<sid>", methods=["PATCH"])
@@ -760,7 +717,6 @@ def cron_dispatch():
 
     now_utc = datetime.utcnow()
     processed = 0
-    # 每次最多處理 50 筆
     for _ in range(50):
         r = reminders_col.find_one_and_update(
             {"status": "scheduled", "dueAt": {"$lte": now_utc}},
@@ -798,9 +754,23 @@ def cron_dispatch():
 
     return jsonify({"ok": True, "processed": processed}), 200
 
-# -----------------------------------------------------------------------------
+# Google 診斷：確認 refresh token & Calendar ID 可用
+@app.route("/api/admin/diag/google", methods=["GET"])
+@require_admin
+def admin_diag_google():
+    try:
+        svc = _calendar_service()
+        # 讀取 calendar list 或指定 calendar，任何一個成功即可
+        info = svc.calendarList().get(calendarId=GOOGLE_CALENDAR_ID).execute()
+        return jsonify({"ok": True, "calendarId": info.get("id"), "summary": info.get("summary")}), 200
+    except HttpError as e:
+        return jsonify({"ok": False, "error": f"HttpError: {e}"}), 500
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+# ----------------------------------------------------------------------------- #
 # Main
-# -----------------------------------------------------------------------------
+# ----------------------------------------------------------------------------- #
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
     app.run(host="0.0.0.0", port=port)

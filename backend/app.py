@@ -326,6 +326,15 @@ def create_booking():
             "createdAt": datetime.utcnow(),
             "updatedAt": datetime.utcnow(),
         }).inserted_id
+
+        # （新）嘗試推播一則「已收到預約申請」訊息（若未加好友會失敗，無礙流程）
+        try:
+            svc_names = "、".join([s.get("name","") for s in services_col.find({"_id": {"$in": svc_oids}}, {"name":1})])
+            msg = f"已收到您的預約申請：{date} {time}（{svc_names}）。我們將盡快與您確認最終時間。"
+            send_line_push(user_id, msg)
+        except Exception:
+            pass
+
         return jsonify({"_id": str(rid), "status": "pending"}), 201
     except PyMongoError as e:
         return jsonify({"error": str(e)}), 500
@@ -483,7 +492,6 @@ def admin_confirm_booking(bid):
             event_id, event_link = create_calendar_event(summary, "\n".join(desc_lines),
                                                          final_start_local, final_end_local)
         except HttpError as he:
-            # 回傳更明確的診斷
             return jsonify({"error": f"建立行事曆事件失敗（HttpError）: {he}"}), 500
         except Exception as e:
             return jsonify({"error": f"建立行事曆事件失敗: {e}"}), 500
@@ -760,13 +768,26 @@ def cron_dispatch():
 def admin_diag_google():
     try:
         svc = _calendar_service()
-        # 讀取 calendar list 或指定 calendar，任何一個成功即可
         info = svc.calendarList().get(calendarId=GOOGLE_CALENDAR_ID).execute()
         return jsonify({"ok": True, "calendarId": info.get("id"), "summary": info.get("summary")}), 200
     except HttpError as e:
         return jsonify({"ok": False, "error": f"HttpError: {e}"}), 500
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+# （新）簡單推播 API：後台測試用
+@app.route("/api/admin/push", methods=["POST"])
+@require_admin
+def admin_push():
+    data = request.get_json(force=True) or {}
+    user_id = (data.get("userId") or "").strip()
+    text = (data.get("text") or "").strip()
+    if not user_id or not text:
+        return jsonify({"error": "缺少 userId 或 text"}), 400
+    ok = send_line_push(user_id, text)
+    if ok:
+        return jsonify({"ok": True}), 200
+    return jsonify({"ok": False, "error": "LINE push 失敗（多半是尚未加好友）"}), 502
 
 # ----------------------------------------------------------------------------- #
 # Main

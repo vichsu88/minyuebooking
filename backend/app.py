@@ -66,7 +66,7 @@ SALON_ADDRESS = os.environ.get("SALON_ADDRESS", "")
 # Admin 與 Cron 安全
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 CRON_SECRET = os.environ.get("CRON_SECRET")
-MAX_ATTEMPTS = 5 # Cron 重試上限
+MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "5"))  # Cron 重試上限
 
 # 建議索引（可重複呼叫）
 try:
@@ -76,8 +76,9 @@ try:
     bookings_col.create_index([("status", 1), ("finalStartAt", 1)])
     reminders_col.create_index([("status", 1), ("dueAt", 1)])
     customers_col.create_index("phone", unique=False)
+    customers_col.create_index("lineUserId", unique=False)  # 新增：以 LINE ID 映射顧客
     hair_records_col.create_index([("userId", 1), ("customerId", 1), ("date", 1)])
-except Exception as _:
+except Exception:
     pass
 
 # -----------------------------------------------------------------------------
@@ -148,6 +149,32 @@ def require_admin(fn):
 def verify_cron() -> bool:
     token = request.args.get("token") or request.headers.get("X-Cron-Token")
     return bool(token and CRON_SECRET and token == CRON_SECRET)
+
+# 將 users 資料同步/建立到 customers（顯示 LINE 名稱、方便後台管理）
+def _sync_customer_from_user(user_id: str):
+    u = users_col.find_one({"userId": user_id})
+    if not u:
+        return
+    customers_col.update_one(
+        {"lineUserId": user_id},
+        {
+            "$set": {
+                "lineUserId": user_id,
+                "lineDisplayName": u.get("displayName"),
+                "updatedAt": datetime.utcnow(),
+            },
+            "$setOnInsert": {
+                # 第一次建立時帶入 phone/birthday；name 先用 LINE 名稱，可於後台更改
+                "name": u.get("displayName") or "",
+                "nickname": "",
+                "phone": u.get("phone") or "",
+                "birthday": u.get("birthday") or "",
+                "note": "",
+                "createdAt": datetime.utcnow(),
+            },
+        },
+        upsert=True,
+    )
 
 # -----------------------------------------------------------------------------
 # Google Calendar helpers
@@ -286,6 +313,8 @@ def create_booking():
         },
         upsert=True,
     )
+    # 同步到 customers（確保顧客管理可見）
+    _sync_customer_from_user(user_id)
 
     # 驗證服務存在且啟用
     svc_oids = [ObjectId(x) for x in svc_ids]
@@ -360,6 +389,9 @@ def upsert_user():
         {"$set": update, "$setOnInsert": {"createdAt": datetime.utcnow()}},
         upsert=True
     )
+    # 同步到 customers（註冊/更新後）
+    _sync_customer_from_user(user_id)
+
     user = users_col.find_one({"userId": user_id}, {"_id": 0})
     return jsonify(user), 200
 
@@ -382,20 +414,13 @@ def admin_list_pending_bookings():
     svc_oid_set = set()
     for b in bookings:
         for sid in b.get("serviceIds", []):
-            if isinstance(sid, ObjectId):
-                svc_oid_set.add(sid)
-            else:
-                # 兼容萬一資料庫裡是字串
-                try:
-                    svc_oid_set.add(ObjectId(sid))
-                except Exception:
-                    pass
+            try:
+                svc_oid_set.add(ObjectId(sid) if not isinstance(sid, ObjectId) else sid)
+            except Exception:
+                pass
 
     users_map = {
-        u["userId"]: {
-            "displayName": u.get("displayName"),
-            "phone": u.get("phone")
-        }
+        u["userId"]: {"displayName": u.get("displayName"), "phone": u.get("phone")}
         for u in users_col.find(
             {"userId": {"$in": list(user_ids)}},
             {"_id": 0, "userId": 1, "displayName": 1, "phone": 1}
@@ -404,26 +429,20 @@ def admin_list_pending_bookings():
 
     services_map = {
         s["_id"]: s.get("name")
-        for s in services_col.find(
-            {"_id": {"$in": list(svc_oid_set)}},
-            {"_id": 1, "name": 1}
-        )
+        for s in services_col.find({"_id": {"$in": list(svc_oid_set)}}, {"_id": 1, "name": 1})
     }
 
     def enrich(doc):
         base = _json_booking(doc)
-        # 顧客資訊
         u = users_map.get(doc.get("userId"), {})
         base["user"] = u  # {displayName, phone}
-        # 服務名稱
         names = []
         for sid in doc.get("serviceIds", []):
-            if not isinstance(sid, ObjectId):
-                try:
-                    sid = ObjectId(sid)
-                except Exception:
-                    continue
-            n = services_map.get(sid)
+            try:
+                key = ObjectId(sid) if not isinstance(sid, ObjectId) else sid
+            except Exception:
+                continue
+            n = services_map.get(key)
             if n:
                 names.append(n)
         base["serviceNames"] = names
@@ -477,7 +496,6 @@ def admin_confirm_booking(bid):
             y, m, d = map(int, ymd.split("-"))
             hh, mm = map(int, hm.split(":"))
             final_start_local = datetime(y, m, d, hh, mm, tzinfo=TAIPEI)
-
         # 2) final_datetime: ISO 8601（允許 Z）
         elif final_datetime_iso:
             try:
@@ -486,7 +504,6 @@ def admin_confirm_booking(bid):
                 final_start_local = dt_aware.astimezone(TAIPEI)
             except Exception:
                 return jsonify({"error": "final_datetime 格式不合法（需 ISO 8601）"}), 400
-
         # 3) finalDate + finalTime
         else:
             if not final_date or not final_time:
@@ -510,7 +527,9 @@ def admin_confirm_booking(bid):
             f"項目：{svc_names}",
         ]
         try:
-            event_id, event_link = create_calendar_event(summary, "\n".join(desc_lines), final_start_local, final_end_local)
+            event_id, event_link = create_calendar_event(
+                summary, "\n".join(desc_lines), final_start_local, final_end_local
+            )
         except Exception as e:
             return jsonify({"error": f"建立行事曆事件失敗：{e}"}), 500
 
@@ -564,7 +583,9 @@ def admin_list_customers():
     if keyword:
         q["$or"] = [
             {"name": {"$regex": keyword, "$options": "i"}},
-            {"phone": {"$regex": keyword}}
+            {"phone": {"$regex": keyword}},
+            {"lineDisplayName": {"$regex": keyword, "$options": "i"}},  # 支援用 LINE 名稱找
+            {"nickname": {"$regex": keyword, "$options": "i"}},         # 支援用暱稱找
         ]
     cur = customers_col.find(q).sort("updatedAt", -1).limit(200)
     data = []
@@ -584,6 +605,7 @@ def admin_create_customer():
         return jsonify({"error": "姓名必填，電話需 09 開頭共10碼"}), 400
     doc = {
         "name": name,
+        "nickname": d.get("nickname", ""),  # 新增：店內暱稱
         "phone": phone,
         "birthday": birthday,
         "note": d.get("note", ""),
@@ -598,7 +620,7 @@ def admin_create_customer():
 def admin_update_customer(cid):
     d = request.get_json(force=True)
     update = {}
-    for k in ["name", "phone", "birthday", "note"]:
+    for k in ["name", "nickname", "phone", "birthday", "note"]:  # 允許更新暱稱
         if k in d:
             update[k] = d[k]
     if not update:
@@ -609,7 +631,7 @@ def admin_update_customer(cid):
     except Exception:
         return jsonify({"error": "不合法的顧客 ID"}), 400
 
-# 染燙紀錄
+# 染燙/消費紀錄
 @app.route("/api/admin/hair-records", methods=["POST"])
 @require_admin
 def admin_create_hair_record():

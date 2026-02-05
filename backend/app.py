@@ -1,6 +1,7 @@
 import os
 import re
 import logging
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Optional, List
@@ -21,7 +22,10 @@ from googleapiclient.errors import HttpError
 
 # LINE push
 from linebot import LineBotApi
-from linebot.models import TextSendMessage
+from linebot.models import (
+    TextSendMessage, FlexSendMessage, BubbleContainer, BoxComponent,
+    TextComponent, ButtonComponent, URIAction, SeparatorComponent
+)
 from linebot.exceptions import LineBotApiError
 
 # ----------------------------------------------------------------------------- #
@@ -83,7 +87,7 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = os.environ.get("GOOGLE_REFRESH_TOKEN")
 GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "primary")
-SALON_ADDRESS = os.environ.get("SALON_ADDRESS", "")
+SALON_ADDRESS = os.environ.get("SALON_ADDRESS", "台北市文山區") # 預設地址，請確認環境變數
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 CRON_SECRET = os.environ.get("CRON_SECRET")
@@ -162,7 +166,6 @@ def _json_booking(doc: dict, service_map: dict = None) -> dict:
         "serviceNames": s_names,
         "status": doc.get("status"),
         "startAt": _iso_or_none(doc.get("startAt")),
-        # ▼▼▼ 這裡就是我們修正的重點：加入 startAtLocal ▼▼▼
         "startAtLocal": _iso_or_none(_to_local(doc.get("startAt"))),
         "finalStartAtLocal": _iso_or_none(_to_local(doc.get("finalStartAt"))),
         "createdAt": _iso_or_none(doc.get("createdAt")),
@@ -249,14 +252,33 @@ def create_calendar_event(summary: str, description: str, start_local, end_local
     return ev.get("id"), ev.get("htmlLink")
 
 # ----------------------------------------------------------------------------- #
-# LINE push
+# LINE push helpers
 # ----------------------------------------------------------------------------- #
-def send_line_push(user_id: str, message: str) -> bool:
+def get_formatted_datetime(date_str, time_str):
+    """
+    將 "2026-02-06" 與 "16:00" 轉換為 "2026-02-06 (五) 16:00"
+    """
+    try:
+        dt = datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M")
+        weekdays = ["(一)", "(二)", "(三)", "(四)", "(五)", "(六)", "(日)"]
+        wd = weekdays[dt.weekday()]
+        return f"{date_str} {wd} {time_str}"
+    except:
+        return f"{date_str} {time_str}"
+
+def send_line_push(user_id: str, message) -> bool:
+    """
+    支援發送 TextSendMessage 或 FlexSendMessage
+    """
     if not line_bot_api:
         logger.warning("[LINE] LINE_CHANNEL_ACCESS_TOKEN 未設定，跳過推播")
         return False
     try:
-        line_bot_api.push_message(user_id, TextSendMessage(text=message))
+        if isinstance(message, str):
+            line_bot_api.push_message(user_id, TextSendMessage(text=message))
+        else:
+            # 假設傳入的是 SendMessage 物件 (如 FlexSendMessage)
+            line_bot_api.push_message(user_id, message)
         return True
     except LineBotApiError as e:
         logger.error(f"[LINE] push error: {e}")
@@ -300,7 +322,7 @@ def _validate_booking_payload(payload: dict) -> Optional[str]:
 # ----------------------------------------------------------------------------- #
 @app.route("/")
 def index():
-    return "茗月髮型設計 - API 伺服器已啟動 v2.0 (Fix: Token & Slots)"
+    return "茗月髮型設計 - API 伺服器已啟動 v2.0 (Flex Message & Admin Link)"
 
 @app.route("/api/services", methods=["GET"])
 def get_services():
@@ -475,26 +497,73 @@ def create_booking():
         # --- 通知區塊 ---
         svc_names = "、".join([s.get("name","") for s in services_col.find({"_id": {"$in": svc_oids}}, {"name":1})])
         
-        # 1. 發送給客人
+        # 1. 發送給客人 (使用 Flex Message)
         try:
-            msg_user = f"【預約申請收到】\n日期：{date} {time}\n項目：{svc_names}\n\n系統將等待設計師確認，確認後會再次通知您！"
-            send_line_push(user_id, msg_user)
-        except Exception:
-            pass
+            formatted_date = get_formatted_datetime(date, time)
+            
+            flex_message = FlexSendMessage(
+                alt_text="⏳ 預約申請已送出",
+                contents=BubbleContainer(
+                    body=BoxComponent(
+                        layout='vertical',
+                        contents=[
+                            TextComponent(text="⏳ 預約申請已送出", weight='bold', size='xl', color='#8e44ad', align='center'),
+                            SeparatorComponent(margin='md'),
+                            BoxComponent(
+                                layout='vertical',
+                                margin='lg',
+                                spacing='sm',
+                                contents=[
+                                    BoxComponent(
+                                        layout='baseline',
+                                        spacing='sm',
+                                        contents=[
+                                            TextComponent(text="時間", color='#aaaaaa', size='sm', flex=1),
+                                            TextComponent(text=formatted_date, wrap=True, color='#666666', size='sm', flex=5)
+                                        ]
+                                    ),
+                                    BoxComponent(
+                                        layout='baseline',
+                                        spacing='sm',
+                                        contents=[
+                                            TextComponent(text="項目", color='#aaaaaa', size='sm', flex=1),
+                                            TextComponent(text=svc_names, wrap=True, color='#666666', size='sm', flex=5)
+                                        ]
+                                    )
+                                ]
+                            ),
+                            SeparatorComponent(margin='lg'),
+                            TextComponent(
+                                text="系統將等待設計師確認，確認後會再次通知您！",
+                                margin='lg', size='xs', color='#aaaaaa', wrap=True, align='center'
+                            )
+                        ]
+                    )
+                )
+            )
+            send_line_push(user_id, flex_message)
+        except Exception as e:
+            logger.error(f"[Booking] User push failed: {e}")
 
-        # 2. 發送給設計師
+        # 2. 發送給設計師 (使用 Text Message + 連結)
         if ADMIN_LINE_USER_ID:
             try:
                 # 這裡顯示客人的名字與電話
                 customer_name = up.get("displayName") or "顧客"
                 customer_phone = user_in_db.get("phone") or "無電話"
+                formatted_date = get_formatted_datetime(date, time)
+                
+                # 您的 Admin URL (假設前端部署在 Render)
+                admin_url = "https://minyuebooking.onrender.com/admin.html"
+                calendar_url = "https://calendar.google.com/calendar/u/2/r"
                 
                 msg_admin = (
                     f"🔔【新預約通知】\n"
                     f"顧客：{customer_name} ({customer_phone})\n"
-                    f"時間：{date} {time}\n"
-                    f"項目：{svc_names}\n"
-                    f"請至後台確認或婉拒。"
+                    f"時間：{formatted_date}\n"
+                    f"項目：{svc_names}\n\n"
+                    f"👉 前往後台審核：\n{admin_url}\n\n"
+                    f"📅 查看行事曆：\n{calendar_url}"
                 )
                 send_line_push(ADMIN_LINE_USER_ID, msg_admin)
             except Exception as e:
@@ -657,8 +726,73 @@ def admin_confirm_booking(bid):
             }).inserted_id
             bookings_col.update_one({"_id": ObjectId(bid)}, {"$set": {"reminderId": reminder_id}})
 
-        # 立即通知預約成功
-        send_line_push(b.get("userId"), f"【預約成功】\n您的預約已確認！\n時間：{final_start_local.strftime('%Y-%m-%d %H:%M')}\n我們期待您的光臨。")
+        # --- 通知區塊：立即通知預約成功 (Flex Message) ---
+        formatted_date = get_formatted_datetime(
+            final_start_local.strftime("%Y-%m-%d"), 
+            final_start_local.strftime("%H:%M")
+        )
+        
+        map_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(SALON_ADDRESS)}"
+        # 預設首頁連結
+        home_url = "https://minyuebooking.onrender.com"
+
+        flex_message = FlexSendMessage(
+            alt_text="✅ 預約已確認",
+            contents=BubbleContainer(
+                body=BoxComponent(
+                    layout='vertical',
+                    contents=[
+                        TextComponent(text="✅ 預約已確認", weight='bold', size='xl', color='#27ae60', align='center'),
+                        SeparatorComponent(margin='md'),
+                        BoxComponent(
+                            layout='vertical',
+                            margin='lg',
+                            spacing='sm',
+                            contents=[
+                                BoxComponent(
+                                    layout='baseline',
+                                    spacing='sm',
+                                    contents=[
+                                        TextComponent(text="時間", color='#aaaaaa', size='sm', flex=1),
+                                        TextComponent(text=formatted_date, wrap=True, color='#666666', size='sm', flex=5)
+                                    ]
+                                ),
+                                BoxComponent(
+                                    layout='baseline',
+                                    spacing='sm',
+                                    contents=[
+                                        TextComponent(text="項目", color='#aaaaaa', size='sm', flex=1),
+                                        TextComponent(text=svc_names, wrap=True, color='#666666', size='sm', flex=5)
+                                    ]
+                                )
+                            ]
+                        ),
+                        SeparatorComponent(margin='lg'),
+                        TextComponent(
+                            text="我們期待您的光臨！",
+                            margin='lg', size='xs', color='#aaaaaa', wrap=True, align='center'
+                        )
+                    ]
+                ),
+                footer=BoxComponent(
+                    layout='vertical',
+                    spacing='sm',
+                    contents=[
+                        ButtonComponent(
+                            style='link',
+                            height='sm',
+                            action=URIAction(label="📍 開啟 Google Map", uri=map_url)
+                        ),
+                        ButtonComponent(
+                            style='secondary',
+                            height='sm',
+                            action=URIAction(label="🔍 查看我的預約", uri=home_url)
+                        )
+                    ]
+                )
+            )
+        )
+        send_line_push(b.get("userId"), flex_message)
 
         return jsonify({"ok": True}), 200
 

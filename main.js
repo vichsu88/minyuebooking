@@ -6,7 +6,7 @@
     return;
   }
 
-  const { BACKEND_BASE_URL, LIFF_ID, OA_ADD_FRIEND_URL } = CONFIG;
+  const { BACKEND_BASE_URL, LIFF_ID } = CONFIG;
 
   // --- DOM 元素 ---
   // 畫面容器
@@ -49,7 +49,7 @@
   let userProfile = null; // LINE Profile
   let allServices = [];   // 服務列表
   
-  // 預設營業時間 (可依需求調整)
+  // 預設營業時間
   const BUSINESS_HOURS = [
       "09:00", "10:00", "11:00", "12:00", 
       "13:00", "14:00", "15:00", "16:00", 
@@ -68,11 +68,21 @@
   }
 
   function showScreen(screenId) {
-      [welcomeScreen, bookingScreen, successScreen].forEach(el => el.style.display = 'none');
-      document.getElementById(screenId).style.display = 'block';
+      // 隱藏所有畫面，只顯示指定的
+      [welcomeScreen, bookingScreen, successScreen].forEach(el => {
+          if (el) el.classList.add('hidden');
+      });
+      // 顯示目標畫面 (移除 hidden class)
+      const target = document.getElementById(screenId);
+      if (target) target.classList.remove('hidden');
+
+      // 為了相容舊邏輯，若 CSS 用 display:none 控制，這裡補強一下
+      [welcomeScreen, bookingScreen, successScreen].forEach(el => {
+         if(el && !el.classList.contains('hidden')) el.style.display = 'block';
+         else if(el) el.style.display = 'none';
+      });
   }
 
-  // 設定日期選擇器的最小值為今天
   function setMinDate() {
       const today = new Date();
       const yyyy = today.getFullYear();
@@ -94,13 +104,14 @@
       }
     } catch (err) {
       console.error('LIFF Init failed', err);
-      alert('LINE 登入失敗，請檢查網路設定');
+      // 在開發環境若沒 LIFF，可以用假資料測試
+      // alert('LINE 登入失敗'); 
     }
   }
 
   // ====== 4. 核心功能：預約相關 ======
 
-  // (A) 載入服務列表
+  // (A) 載入服務列表 (更新為漂亮的 Service Chips)
   async function loadServices() {
     try {
       const res = await fetch(`${BACKEND_BASE_URL}/api/services`);
@@ -109,20 +120,28 @@
       
       serviceOptionsContainer.innerHTML = '';
       if (allServices.length === 0) {
-        serviceOptionsContainer.textContent = '目前無可預約項目';
+        serviceOptionsContainer.innerHTML = '<small>目前無可預約項目</small>';
         return;
       }
 
       allServices.forEach(svc => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'service-button';
-        btn.dataset.id = svc._id;
-        btn.textContent = `${svc.name} ($${svc.price})`;
-        btn.addEventListener('click', () => {
-          btn.classList.toggle('selected');
+        // 建立外層 div (Service Chip)
+        const chip = document.createElement('div');
+        chip.className = 'service-chip'; // 對應新的 CSS
+        chip.dataset.id = svc._id;
+        
+        // 內部結構：名稱與價格
+        chip.innerHTML = `
+            <div class="name">${escapeHtml(svc.name)}</div>
+            <div class="price">$${svc.price}</div>
+        `;
+
+        // 點擊事件
+        chip.addEventListener('click', () => {
+          chip.classList.toggle('selected');
         });
-        serviceOptionsContainer.appendChild(btn);
+
+        serviceOptionsContainer.appendChild(chip);
       });
     } catch (err) {
       console.error(err);
@@ -130,21 +149,19 @@
     }
   }
 
-  // (B) 查詢 Google Calendar 忙碌時段
+  // (B) 查詢忙碌時段
   async function fetchBusySlots(dateStr) {
       try {
-          // 顯示載入中
           timeSlotSelect.innerHTML = '<option>查詢時段中...</option>';
           timeSlotSelect.disabled = true;
 
           const res = await fetch(`${BACKEND_BASE_URL}/api/slots/busy?date=${dateStr}`);
           const data = await res.json();
-          const busySlots = data.busySlots || []; // 例如 ["14:00", "15:00"]
+          const busySlots = data.busySlots || []; 
 
           renderTimeSlots(busySlots);
       } catch (err) {
           console.error('Fetch busy slots failed:', err);
-          // 若失敗，則不鎖定，僅顯示預設時段
           renderTimeSlots([]);
       } finally {
           timeSlotSelect.disabled = false;
@@ -168,7 +185,6 @@
       });
   }
 
-  // 監聽日期變更
   datePicker.addEventListener('change', (e) => {
       const dateVal = e.target.value;
       if (dateVal) {
@@ -181,8 +197,9 @@
     e.preventDefault();
     if (!userProfile) return alert('請先登入 LINE');
 
-    const selectedBtns = document.querySelectorAll('.service-button.selected');
-    const selectedIds = Array.from(selectedBtns).map(btn => btn.dataset.id);
+    // 注意：這裡選擇器改成 .service-chip.selected
+    const selectedChips = document.querySelectorAll('.service-chip.selected');
+    const selectedIds = Array.from(selectedChips).map(chip => chip.dataset.id);
     const dateVal = datePicker.value;
     const timeVal = timeSlotSelect.value;
 
@@ -209,15 +226,11 @@
       const data = await res.json();
 
       if (res.ok) {
-        // 成功 -> 切換到成功畫面
         showScreen('success-screen');
       } else {
-        // 失敗處理
         if (data.code === 'USER_NOT_REGISTERED') {
-            // 強制註冊流程
-            alert('這是您第一次預約，請先填寫聯絡電話以便確認！');
+            alert('這是您第一次預約，請先填寫聯絡電話！');
             registerModal.classList.remove('hidden');
-            // 嘗試預填
             checkUserRegistration(userProfile.userId); 
         } else {
             alert(`預約失敗：${data.error}`);
@@ -228,64 +241,73 @@
     }
   });
 
-  // ====== 5. 查詢我的預約 ======
-  async function loadMyBookings() {
-      if (!userProfile) return;
-      
-      myBookingsList.innerHTML = '<p style="text-align:center;">讀取中...</p>';
-      myBookingsModal.classList.remove('hidden');
+// 找到 loadMyBookings 函式，整段換成這個：
+async function loadMyBookings() {
+    if (!userProfile) return;
+    
+    // 先顯示載入中
+    myBookingsList.innerHTML = '<p style="text-align:center;">讀取中...</p>';
+    myBookingsModal.classList.remove('hidden');
 
-      try {
-          const res = await fetch(`${BACKEND_BASE_URL}/api/bookings/my?userId=${userProfile.userId}`);
-          if (!res.ok) throw new Error('讀取失敗');
-          
-          const bookings = await res.json();
-          if (bookings.length === 0) {
-              myBookingsList.innerHTML = '<p style="text-align:center;">您目前沒有預約紀錄。</p>';
-              return;
-          }
+    try {
+        const res = await fetch(`${BACKEND_BASE_URL}/api/bookings/my?userId=${userProfile.userId}`);
+        if (!res.ok) throw new Error('讀取失敗');
+        
+        const bookings = await res.json();
+        
+        // 如果沒有預約
+        if (bookings.length === 0) {
+            myBookingsList.innerHTML = '<p style="text-align:center;">您目前沒有預約紀錄。</p>';
+            return;
+        }
 
-          myBookingsList.innerHTML = bookings.map(b => {
-              // 狀態文字轉換
-              let statusText = '待確認';
-              let badgeClass = 'badge-pending';
-              let cardClass = 'status-pending';
+        // ★★★ 關鍵修改在這裡 ★★★
+        // 這裡會產生有 "booking-card" class 的 HTML，CSS 才會生效變紫色
+        myBookingsList.innerHTML = bookings.map(b => {
+            // 1. 決定狀態顏色 (紫色系)
+            let statusText = '待確認';
+            let badgeClass = 'pending'; // 對應 CSS 的淺紫色標籤
+            
+            // 根據後端回傳的狀態文字做判斷 (請依據你資料庫實際存的值調整)
+            if (b.status === 'confirmed' || b.status === '預約成功' || b.status === '成功') {
+                statusText = '預約成功';
+                badgeClass = 'confirmed'; // 對應 CSS 的深紫色標籤
+            } else if (b.status === 'cancelled' || b.status === '已取消') {
+                statusText = '已取消';
+                badgeClass = 'cancelled';
+            }
 
-              if (b.status === 'confirmed') {
-                  statusText = '預約成功';
-                  badgeClass = 'badge-confirmed';
-                  cardClass = 'status-confirmed';
-              } else if (b.status === 'cancelled') {
-                  statusText = '已取消/婉拒';
-                  badgeClass = 'badge-cancelled';
-                  cardClass = 'status-cancelled';
-              }
+            // 2. 處理時間顯示 (讓它漂亮一點)
+            let displayTime = `${b.date} ${b.time}`;
+            if (b.finalStartAtLocal) {
+                const d = new Date(b.finalStartAtLocal);
+                // 格式：2026/02/06 13:00
+                const dateStr = `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}`;
+                const timeStr = `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+                displayTime = `${dateStr} ${timeStr}`;
+            }
 
-              const displayTime = b.finalStartAtLocal 
-                  ? new Date(b.finalStartAtLocal).toLocaleString('zh-TW', {hour12:false}).slice(0, -3)
-                  : `${b.date} ${b.time}`;
-
-              return `
-                <div class="booking-card ${cardClass}">
+            // 3. 回傳漂亮的卡片 HTML
+            return `
+              <div class="booking-card">
+                <div class="booking-header">
+                  <span class="booking-date">${displayTime}</span>
                   <span class="status-badge ${badgeClass}">${statusText}</span>
-                  <div style="font-weight:bold; font-size:1.1rem; margin:5px 0;">
-                    ${displayTime}
-                  </div>
-                  <div style="color:#555; font-size:0.9rem;">
-                    項目：${b.serviceNames ? b.serviceNames.join('、') : '一般服務'}
-                  </div>
                 </div>
-              `;
-          }).join('');
+                <div class="booking-detail">
+                  項目：${b.serviceNames ? b.serviceNames.join('、') : '一般服務'}
+                </div>
+              </div>
+            `;
+        }).join('');
 
-      } catch (err) {
-          myBookingsList.innerHTML = '<p style="text-align:center; color:red;">讀取失敗，請稍後再試。</p>';
-      }
-  }
-
+    } catch (err) {
+        console.error(err);
+        myBookingsList.innerHTML = '<p style="text-align:center; color:red;">讀取失敗，請稍後再試。</p>';
+    }
+}
   // ====== 6. 註冊與其他 Modal ======
   
-  // 檢查使用者資料 (用於預填)
   async function checkUserRegistration(userId) {
     try {
       const res = await fetch(`${BACKEND_BASE_URL}/api/users/check?userId=${userId}`);
@@ -297,7 +319,6 @@
     } catch (e) { /* ignore */ }
   }
 
-  // 註冊表單送出
   registerForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const phone = regPhoneInput.value.trim();
@@ -329,8 +350,12 @@
 
   // 價目表 Modal
   priceListButton.addEventListener('click', () => {
-    const html = '<ul>' + allServices.map(svc =>
-      `<li><span>${escapeHtml(svc.name)}</span><span>$${svc.price}</span></li>`
+    // 使用簡單的 HTML，CSS 會處理顏色
+    const html = '<ul style="list-style: none; padding: 0;">' + allServices.map(svc =>
+      `<li style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #ddd;">
+         <span>${escapeHtml(svc.name)}</span>
+         <span style="font-weight:bold;">$${svc.price}</span>
+       </li>`
     ).join('') + '</ul>';
     modalPriceList.innerHTML = html;
     priceListModal.classList.remove('hidden');
@@ -338,10 +363,9 @@
 
   // ====== 7. 事件綁定總覽 ======
 
-  // 按鈕切換頁面
   agreeButton.addEventListener('click', () => {
       showScreen('booking-screen');
-      loadServices(); // 進入頁面才讀取服務
+      loadServices();
   });
   backToHomeBtn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -349,19 +373,19 @@
   });
   successHomeBtn.addEventListener('click', () => showScreen('welcome-screen'));
   
-  // 我的預約相關
   checkMyBookingsBtn.addEventListener('click', loadMyBookings);
   successViewBookingsBtn.addEventListener('click', () => {
-      // 這裡如果直接跳 Modal 體驗較好，不用換頁
       loadMyBookings();
   });
 
-  // 關閉 Modal 通用邏輯
+  // 點擊 Modal 背景關閉
   [priceListModal, registerModal, myBookingsModal].forEach(modal => {
       modal.addEventListener('click', (e) => {
           if (e.target === modal) modal.classList.add('hidden');
       });
   });
+  
+  // 關閉按鈕
   closeModalButton.addEventListener('click', () => priceListModal.classList.add('hidden'));
   closeRegisterModal.addEventListener('click', () => registerModal.classList.add('hidden'));
   closeMyBookingsBtn.addEventListener('click', () => myBookingsModal.classList.add('hidden'));

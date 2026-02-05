@@ -8,257 +8,347 @@
   <meta property="og:title" content="茗月髮型設計 - 線上預約">
   <meta property="og:description" content="專業剪髮、染燙服務，24小時線上預約您的專屬時段！">
   <meta property="og:image" content="assets/images/background.png">
-  <meta property="og:type" content="website">
-  <meta property="og:locale" content="zh_TW">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="assets/css/style.css?v=2.7"> 
-
   <style>
     /* =========================================
-       強制覆蓋樣式 (Forced Overrides)
+       💜 茗月專屬 - 紫色夢幻 UI 樣式表 💜
        ========================================= */
 
     :root {
-      /* 修改：大幅降低透明度 (0.25)，讓背景雲朵更清楚 */
-      --glass-bg: rgba(255, 255, 255, 0.25);
-      --glass-border: rgba(255, 255, 255, 0.5);
-      --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+      /* --- 紫色色票系統 --- */
+      --purple-primary: #6c5ce7;   /* 主標題紫 (較亮) */
+      --purple-dark: #3c1e6e;      /* 深邃紫 (用於重要文字) */
+      --purple-text: #5e4b8a;      /* 一般內文紫 (柔和讀起來舒服) */
+      --purple-light: #a29bfe;     /* 裝飾用淺紫 */
+      --purple-bg: #f3e5f5;        /* 極淡紫背景 */
       
-      /* 按鈕漸層色 (紫粉色系) */
+      /* 漸層按鈕 */
       --btn-gradient: linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%);
-      --text-dark: #4a4a4a;
-      --text-highlight: #6c5ce7;
+      
+      /* 玻璃擬態參數 */
+      --glass-bg: rgba(255, 255, 255, 0.65);
+      --glass-border: rgba(255, 255, 255, 0.8);
+      --shadow-soft: 0 8px 32px 0 rgba(108, 92, 231, 0.15); /* 陰影也帶一點點紫 */
     }
 
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
     body {
-      /* 確保背景圖固定，不會隨捲動跑掉 */
-      background-image: url('assets/images/background.png');
+      margin: 0; padding: 0;
+      font-family: 'Noto Sans TC', sans-serif;
+      /* 背景設定 */
+      background-image: url('assets/images/background.png'); 
       background-size: cover;
       background-position: center;
       background-attachment: fixed;
       background-repeat: no-repeat;
-      color: var(--text-dark);
-      font-family: 'Noto Sans TC', sans-serif;
+      
+      /* 全站文字預設為柔和紫色，取代純黑 */
+      color: var(--purple-text);
+      
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 20px;
     }
 
-    /* 1. 內容區塊透明化：強制移除原本的白底 */
-    .container, .content-box, .modal-content {
-      background: var(--glass-bg) !important; /* 強制覆蓋 style.css 的白底 */
-      background-color: var(--glass-bg) !important;
-      backdrop-filter: blur(8px); /* 毛玻璃模糊效果 */
-      -webkit-backdrop-filter: blur(8px);
+    /* 隱藏桌機警告 */
+    #desktop-warning { display: none; }
+
+    /* 主要容器 */
+    #main-content {
+      width: 100%;
+      max-width: 420px;
+      padding: 0 20px 50px 20px;
+    }
+
+    /* === 毛玻璃卡片 (共用) === */
+    .glass-card {
+      background: var(--glass-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border: 1px solid var(--glass-border);
-      box-shadow: var(--glass-shadow);
-      border-radius: 20px;
-      padding: 25px 20px !important;
+      border-radius: 24px;
+      padding: 30px 24px;
+      box-shadow: var(--shadow-soft);
       margin-bottom: 20px;
+      animation: fadeIn 0.5s ease-out;
     }
 
-    /* 2. 文字顏色修正：確保在淺色玻璃上清楚可見 */
-    h1, h2, h3, .booking-title {
-      color: #333 !important; /* 深灰色標題 */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* === 文字排版 (強制紫色) === */
+    h1, h2, h3, .booking-title, #modal-title {
+      font-size: 1.8rem;
       font-weight: 700;
-      text-shadow: 1px 1px 2px rgba(255,255,255,0.8);
-      margin-bottom: 15px;
+      color: var(--purple-primary) !important; /* 強制標題紫 */
+      text-align: center;
+      margin: 0 0 15px 0;
+      letter-spacing: 1px;
+      text-shadow: 0 2px 10px rgba(108, 92, 231, 0.1);
     }
 
-    p, .welcome-text, label {
-      color: #2c3e50 !important; /* 深藍灰色內文 */
+    p {
+      font-size: 1rem;
+      line-height: 1.6;
+      color: var(--purple-text); /* 內文紫 */
+      text-align: center;
+      margin-bottom: 25px;
+    }
+
+    .welcome-text {
+      text-align: left;
+      font-size: 1.1rem;
+      color: var(--purple-dark);
       font-weight: 500;
-      text-shadow: 0 0 2px rgba(255,255,255,0.5);
     }
 
-    /* 3. 表單排版修正 */
-    .form-row {
-      display: flex;
-      flex-direction: column;
-      margin-bottom: 15px;
-      width: 100%;
-    }
-    
-    .form-label {
-      margin-bottom: 5px;
-      font-size: 1rem;
-      color: #333 !important;
+    .highlight-name {
+      color: var(--purple-primary);
+      font-weight: 700;
+      font-size: 1.3rem;
     }
 
-    /* 4. 輸入框優化：半透明白底，讓字看得到 */
-    .form-input, select.form-input {
-      width: 100%;
-      height: 45px;
-      background: rgba(255, 255, 255, 0.6) !important;
-      border: 1px solid rgba(255, 255, 255, 0.8) !important;
-      border-radius: 10px;
-      padding: 0 15px;
-      font-size: 1rem;
-      color: #000 !important; /* 強制輸入文字為黑色 */
-      outline: none;
-    }
-    .form-input:focus {
-      background: rgba(255, 255, 255, 0.9) !important;
-      border-color: var(--text-highlight) !important;
-    }
+    /* === 表單元件 === */
+    .form-group { margin-bottom: 20px; }
 
-    /* 5. 服務選項按鈕：修正看不見的問題 */
-    #service-options {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .service-button {
-      flex: 1 1 45%; /* 手機上一行兩個 */
-      background: rgba(255, 255, 255, 0.5) !important;
-      border: 1px solid #fff !important;
-      color: #333 !important; /* 強制文字深色 */
-      padding: 12px;
-      border-radius: 12px;
+    label {
+      display: block;
       font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--purple-dark); /* 標籤文字深紫 */
+      margin-bottom: 8px;
+    }
+
+    .custom-input {
+      width: 100%;
+      height: 50px;
+      padding: 0 16px;
+      border: 2px solid rgba(255,255,255,0.5);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.8);
+      font-size: 1rem;
+      color: var(--purple-dark) !important; /* 輸入的字也是深紫色 */
+      outline: none;
+      transition: all 0.3s;
+    }
+
+    .custom-input:focus {
+      background: #fff;
+      border-color: var(--purple-light);
+      box-shadow: 0 0 0 4px rgba(161, 140, 209, 0.2);
+    }
+
+    /* === 按鈕設計 === */
+    .btn-group { display: flex; flex-direction: column; gap: 15px; margin-top: 25px; }
+    .btn-row { display: flex; gap: 12px; margin-top: 25px; }
+
+    .btn {
+      width: 100%; height: 52px;
+      border: none; border-radius: 50px;
+      font-size: 1.05rem; font-weight: 700;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.1s;
+    }
+    .btn:active { transform: scale(0.97); }
+
+    /* 主要按鈕 (漸層) */
+    .btn-primary {
+      background: var(--btn-gradient);
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(161, 140, 209, 0.4);
+    }
+
+    /* 次要按鈕 (紫色框) */
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.6);
+      border: 2px solid var(--purple-light);
+      color: var(--purple-primary);
+    }
+
+    /* === 服務膠囊選單 === */
+    #service-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    
+    .service-chip {
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(255,255,255,0.8);
+      border-radius: 16px;
+      padding: 15px;
+      text-align: center;
       cursor: pointer;
       transition: all 0.2s;
     }
+    .service-chip .name { color: var(--purple-dark); font-weight: 500; margin-bottom: 4px; }
+    .service-chip .price { color: var(--purple-text); font-size: 0.9rem; }
 
-    .service-button.selected {
-      background: var(--text-highlight) !important; /* 選中變深紫色 */
-      color: #fff !important; /* 選中文字變白 */
-      border-color: var(--text-highlight) !important;
-      box-shadow: 0 4px 10px rgba(108, 92, 231, 0.3);
+    /* 選中狀態 */
+    .service-chip.selected {
+      background: #fff;
+      border-color: var(--purple-primary);
+      box-shadow: 0 0 0 2px var(--purple-primary);
+    }
+    .service-chip.selected .name { color: var(--purple-primary); font-weight: 700; }
+    .service-chip.selected .price { color: var(--purple-primary); }
+
+
+    /* =========================================
+       💜 重頭戲：預約歷史卡片 (My Bookings)
+       全部改成紫色調，不要黑色
+       ========================================= */
+    .booking-card {
+      background: rgba(255, 255, 255, 0.9); /* 純淨白底 */
+      border-radius: 16px;
+      padding: 16px 20px;
+      margin-bottom: 15px;
+      border-left: 6px solid var(--purple-light); /* 左側紫色裝飾條 */
+      box-shadow: 0 4px 10px rgba(108, 92, 231, 0.08);
+      position: relative;
     }
 
-    /* 6. 主要按鈕 (CTA) 優化 */
-    .button-group {
+    .booking-header {
       display: flex;
-      gap: 15px;
-      margin-top: 25px;
-    }
-
-    .form-button, .cta-button {
-      border: none;
-      height: 50px;
-      border-radius: 25px;
-      font-size: 1.1rem;
-      font-weight: bold;
-      cursor: pointer;
-      display: flex; /* 確保文字置中 */
+      justify-content: space-between;
       align-items: center;
-      justify-content: center;
-      width: 100%;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-      transition: transform 0.2s;
+      margin-bottom: 8px;
     }
 
-    /* 送出預約 / 我要預約：使用漸層色 */
-    .form-button.submit, #agreeButton, #successViewBookingsBtn {
-      background: var(--btn-gradient) !important;
-      color: #fff !important; /* 強制白字 */
-      text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    .booking-date {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--purple-dark); /* 日期用深紫 */
+      letter-spacing: 0.5px;
     }
 
-    /* 次要按鈕 (價目表、我的預約)：白底深字 */
-    #priceListButton, #checkMyBookingsBtn, #successHomeBtn {
-      background: rgba(255, 255, 255, 0.8) !important;
-      color: var(--text-highlight) !important;
-      border: 2px solid var(--text-highlight) !important;
+    .booking-detail {
+      font-size: 0.95rem;
+      color: var(--purple-text); /* 內容用柔和紫 */
+      margin-top: 4px;
     }
 
-    /* 點擊效果 */
-    button:active {
-      transform: scale(0.96);
+    /* 狀態標籤 - 紫色系 */
+    .status-badge {
+      font-size: 0.8rem;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-weight: 500;
     }
 
-    /* 連結修正 */
-    #backToHomeBtn {
-      color: #555 !important;
-      text-decoration: underline;
-      margin-top: 20px;
-      display: inline-block;
-    }
-    
-    /* 修正 Modal 裡的文字顏色 */
-    #modal-price-list span {
-      color: #333 !important;
-    }
-    #my-bookings-list .booking-card {
-       background: rgba(255,255,255,0.7) !important; /* 卡片稍微不透明一點以便閱讀 */
-       color: #333 !important;
+    /* 待確認：柔和的薰衣草色背景 */
+    .status-badge.pending {
+      background-color: #f3e5f5; 
+      color: #8e44ad;
+      border: 1px solid #e1bee7;
     }
 
+    /* 預約成功：顯眼的深紫色背景，白字 */
+    .status-badge.confirmed {
+      background-color: #6c5ce7;
+      color: #ffffff;
+      box-shadow: 0 2px 5px rgba(108, 92, 231, 0.3);
+    }
+
+    /* === Modal 彈窗 === */
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(60, 30, 110, 0.3); /* 背景變暗也是紫色系 */
+      backdrop-filter: blur(4px);
+      z-index: 999;
+      display: flex; justify-content: center; align-items: center;
+      opacity: 0; pointer-events: none; transition: opacity 0.3s;
+    }
+    .modal-overlay:not(.hidden) { opacity: 1; pointer-events: auto; }
+
+    .modal-content {
+      width: 90%; max-width: 360px; max-height: 80vh;
+      background: #fff;
+      border-radius: 24px;
+      padding: 25px;
+      position: relative;
+      overflow-y: auto;
+    }
+    .close-button {
+      position: absolute; top: 15px; right: 20px;
+      background: none; border: none; font-size: 24px;
+      color: var(--purple-light); /* 關閉按鈕也是淺紫 */
+      cursor: pointer;
+    }
+
+    /* Helper */
+    .hidden { display: none !important; }
+    .link-btn { color: var(--purple-text); text-decoration: underline; text-align: center; display: block; margin-top: 15px; }
   </style>
 </head>
 <body>
 
-  <div id="desktop-warning">
-    <p>為了獲得最佳體驗，此預約系統建議使用手機操作，謝謝！</p>
-  </div>
-
   <main id="main-content">
     
-    <div id="welcome-screen" class="container">
-      <div class="content-box" style="box-shadow: none !important; background: transparent !important; border: none !important;">
-        <h1>茗月髮型設計</h1>
-        <p>
-          歡迎使用線上預約系統。<br>
-          透明公開的價格，專屬您的設計時段。
-        </p>
-        <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 30px;">
-          <button id="agreeButton" class="cta-button">我要預約</button>
-          <button id="checkMyBookingsBtn" class="cta-button">我的預約</button>
-        </div>
+    <div id="welcome-screen" class="glass-card">
+      <h1>茗月髮型設計</h1>
+      <p>
+        專屬您的質感沙龍。<br>
+        24小時線上預約，透明公開的價格。
+      </p>
+      <div class="btn-group">
+        <button id="agreeButton" class="btn btn-primary">立即預約</button>
+        <button id="checkMyBookingsBtn" class="btn btn-secondary">我的預約</button>
       </div>
     </div>
 
-    <div id="booking-screen" class="container" style="display:none;">
+    <div id="booking-screen" class="glass-card hidden">
       <h1 class="booking-title">預約服務</h1>
-      <p class="welcome-text">Hi <span id="displayName" style="color: #6c5ce7; font-weight:bold;">...</span>，請填寫資訊：</p>
+      <p class="welcome-text">
+        Hi <span id="displayName" class="highlight-name">...</span>，<br>
+        今天想做什麼改變呢？
+      </p>
 
       <form id="booking-form">
-        <div class="form-row">
-          <label class="form-label" for="date-picker">選擇日期</label>
-          <input type="date" id="date-picker" class="form-input" required>
+        <div class="form-group">
+          <label for="date-picker">選擇日期</label>
+          <input type="date" id="date-picker" class="custom-input" required>
         </div>
 
-        <div class="form-row">
-          <label class="form-label" for="time-slot">選擇時段</label>
-          <select id="time-slot" class="form-input" required>
+        <div class="form-group">
+          <label for="time-slot">選擇時段</label>
+          <select id="time-slot" class="custom-input" required>
             <option value="" disabled selected>請先選擇日期</option>
           </select>
         </div>
 
-        <div class="form-row">
-          <label class="form-label">預約項目</label>
+        <div class="form-group">
+          <label>預約項目</label>
           <div id="service-options">
-            <small style="color:#555;">(載入中...)</small>
+            <small style="color: var(--purple-text); grid-column: span 2; text-align: center;">載入服務項目...</small>
           </div>
         </div>
 
-        <div class="button-group">
-          <button type="button" id="priceListButton" class="form-button">價目表</button>
-          <button type="submit" class="form-button submit">送出預約</button>
+        <div class="btn-row">
+          <button type="button" id="priceListButton" class="btn btn-secondary" style="flex: 1;">價目表</button>
+          <button type="submit" class="btn btn-primary" style="flex: 2;">送出預約</button>
         </div>
         
-        <div style="text-align: center;">
-            <a href="#" id="backToHomeBtn">返回首頁</a>
-        </div>
+        <a href="#" id="backToHomeBtn" class="link-btn">返回首頁</a>
       </form>
     </div>
 
-    <div id="success-screen" class="container" style="display:none; text-align: center;">
-      <div class="content-box" style="background: transparent !important; border: none !important; box-shadow: none !important;">
-        <div style="font-size: 5rem; color: #fff; text-shadow: 0 0 10px #2ecc71; margin-bottom: 10px;">✓</div>
-        <h1 style="color: #333;">預約申請已送出</h1>
-        <p>
-          我們已收到您的請求。<br>
-          系統將通知設計師進行確認，<br>
-          請留意您的 LINE 通知。
-        </p>
-        <div style="margin-top: 30px;">
-          <button id="successViewBookingsBtn" class="form-button submit" style="margin-bottom: 15px;">查看我的預約</button>
-          <button id="successHomeBtn" class="form-button">返回首頁</button>
-        </div>
+    <div id="success-screen" class="glass-card hidden" style="text-align: center;">
+      <div style="font-size: 4rem; color: #a29bfe; margin-bottom: 10px;">✓</div>
+      <h1>預約申請已送出</h1>
+      <p>
+        我們已收到您的請求！<br>
+        確認結果將透過 LINE 通知您。
+      </p>
+      <div class="btn-group">
+        <button id="successViewBookingsBtn" class="btn btn-primary">查看預約紀錄</button>
+        <button id="successHomeBtn" class="btn btn-secondary">返回首頁</button>
       </div>
     </div>
 
@@ -266,41 +356,36 @@
 
   <div id="price-list-modal" class="modal-overlay hidden">
     <div class="modal-content">
-      <button id="closeModalButton" class="close-button" aria-label="關閉" style="font-size: 1.5rem; color: #333;">&times;</button>
-      <h2 style="text-align: center; color: #6c5ce7;">價目表</h2>
-      <div id="modal-price-list" style="margin-top: 15px;"></div>
+      <button id="closeModalButton" class="close-button">&times;</button>
+      <h2 id="modal-title">價目表</h2>
+      <div id="modal-price-list" style="color: var(--purple-dark);"></div>
     </div>
   </div>
 
   <div id="register-modal" class="modal-overlay hidden">
     <div class="modal-content">
-      <button id="closeRegisterModal" class="close-button" aria-label="關閉" style="font-size: 1.5rem; color: #333;">&times;</button>
-      <h2 style="text-align: center;">基本資料填寫</h2>
-      <p style="font-size: 0.9rem; text-align: center; margin-bottom: 20px;">
-        為了方便聯繫確認，請填寫手機號碼。
-      </p>
+      <button id="closeRegisterModal" class="close-button">&times;</button>
+      <h2 id="modal-title">補充資料</h2>
       <form id="register-form">
-        <div class="form-row">
-          <label class="form-label" for="reg-phone">手機號碼</label>
-          <input id="reg-phone" class="form-input" type="tel" inputmode="numeric" pattern="09\d{8}" placeholder="09xxxxxxxx" required>
+        <div class="form-group">
+          <label for="reg-phone">手機號碼</label>
+          <input id="reg-phone" class="custom-input" type="tel" placeholder="09xxxxxxxx" required>
         </div>
-        <div class="form-row">
-          <label class="form-label" for="reg-birthday">生日</label>
-          <input type="date" id="reg-birthday" class="form-input" required>
+        <div class="form-group">
+          <label for="reg-birthday">生日</label>
+          <input type="date" id="reg-birthday" class="custom-input" required>
         </div>
-        <div class="button-group">
-          <button type="submit" class="form-button submit">儲存資料</button>
-        </div>
+        <button type="submit" class="btn btn-primary" style="margin-top:20px;">儲存</button>
       </form>
     </div>
   </div>
 
   <div id="my-bookings-modal" class="modal-overlay hidden">
     <div class="modal-content">
-      <button id="closeMyBookingsBtn" class="close-button" aria-label="關閉" style="font-size: 1.5rem; color: #333;">&times;</button>
-      <h2 style="text-align: center; color: #6c5ce7;">我的預約</h2>
-      <div id="my-bookings-list" style="max-height: 60vh; overflow-y: auto; margin-top: 15px;">
-        <p style="text-align:center; color:#999;">載入中...</p>
+      <button id="closeMyBookingsBtn" class="close-button">&times;</button>
+      <h2 id="modal-title">我的預約</h2>
+      <div id="my-bookings-list" style="margin-top: 20px; max-height: 60vh; overflow-y: auto;">
+        <p style="text-align:center;">載入中...</p>
       </div>
     </div>
   </div>

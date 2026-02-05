@@ -5,15 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>茗月髮型設計 - 預約服務</title>
   
+  <meta property="og:title" content="茗月髮型設計 - 線上預約">
+  <meta property="og:description" content="專業剪髮、染燙服務，24小時線上預約您的專屬時段！">
+  <meta property="og:image" content="assets/images/background.png">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="zh_TW">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="assets/css/style.css?v=2.3"> </head>
+  <link rel="stylesheet" href="assets/css/style.css?v=2.4"> 
+</head>
 <body>
 
   <div id="desktop-warning">
-    <p>此預約系統僅支援手機版操作，請用手機開啟此網頁，謝謝！</p>
+    <p>為了獲得最佳體驗，此預約系統建議使用手機操作，謝謝！</p>
   </div>
 
   <main id="main-content">
@@ -74,7 +81,7 @@
 
   <div id="price-list-modal" class="modal-overlay hidden">
     <div class="modal-content">
-      <button id="closeModalButton" class="close-button">&times;</button>
+      <button id="closeModalButton" class="close-button" aria-label="關閉價目表">&times;</button>
       <h2>價目表</h2>
       <div id="modal-price-list"></div>
     </div>
@@ -82,7 +89,7 @@
 
   <div id="register-modal" class="modal-overlay hidden">
     <div class="modal-content">
-      <button id="closeRegisterModal" class="close-button" aria-label="關閉">&times;</button>
+      <button id="closeRegisterModal" class="close-button" aria-label="關閉註冊視窗">&times;</button>
       <h2>第一次使用請先完成基本資料</h2>
       <form id="register-form">
         <div class="form-row">
@@ -101,6 +108,9 @@
   </div>
 
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  
+  <script src="config.js"></script>
+
   <script src="main.js"></script>
 </body>
 </html>

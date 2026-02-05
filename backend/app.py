@@ -1,13 +1,14 @@
 import os
 import re
+import logging
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from typing import Optional
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 from flask_cors import CORS
 from pymongo import MongoClient
-from pymongo.errors import PyMongoError
+from pymongo.errors import PyMongoError, ConfigurationError
 from bson import ObjectId
 from zoneinfo import ZoneInfo
 from dotenv import load_dotenv
@@ -24,22 +25,43 @@ from linebot.models import TextSendMessage
 from linebot.exceptions import LineBotApiError
 
 # ----------------------------------------------------------------------------- #
-# Initialization
+# Initialization & Configuration
 # ----------------------------------------------------------------------------- #
+# 設定日誌
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 load_dotenv()
 app = Flask(__name__)
 
+# 安全性設定：允許的來源
+# 在 Render 環境變數中設定 ALLOWED_ORIGINS，例如 "https://your-frontend.onrender.com"
+# 本機開發可設為 "*" 或 "http://127.0.0.1:5500"
 ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*")
-origins = [o.strip() for o in ALLOWED_ORIGINS.split(",")] if ALLOWED_ORIGINS != "*" else "*"
-CORS(app, resources={r"/api/*": {"origins": origins}})
+origins_list = [o.strip() for o in ALLOWED_ORIGINS.split(",")] if ALLOWED_ORIGINS != "*" else "*"
 
+# CORS 設定
+CORS(app, resources={r"/api/*": {"origins": origins_list}})
+
+# MongoDB 連線設定
 MONGO_URI = os.environ.get("MONGO_URI")
 if not MONGO_URI:
+    logger.error("FATAL: MONGO_URI is not set.")
     raise RuntimeError("FATAL: MONGO_URI is not set.")
-client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-db = client.minyue_db
-client.admin.command("ping")
 
+try:
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    db = client.minyue_db
+    # 立即測試連線
+    client.admin.command("ping")
+    logger.info("MongoDB connection successful.")
+except ConfigurationError as ce:
+    logger.error(f"MongoDB Configuration Error: {ce}")
+    # 這裡不 raise，讓 App 勉強啟動，但後續 DB 操作會失敗
+except Exception as e:
+    logger.error(f"MongoDB Connection Failed: {e}")
+
+# Collections
 services_col = db.services
 bookings_col = db.bookings
 users_col = db.users
@@ -47,8 +69,10 @@ customers_col = db.customers
 hair_records_col = db.hair_records
 reminders_col = db.reminders
 
+# Timezone
 TAIPEI = ZoneInfo("Asia/Taipei")
 
+# External Services
 LINE_CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN) if LINE_CHANNEL_ACCESS_TOKEN else None
 
@@ -62,7 +86,7 @@ ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 CRON_SECRET = os.environ.get("CRON_SECRET")
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "5"))
 
-# 索引
+# 建立索引 (如果不存在)
 try:
     users_col.create_index("userId", unique=True)
     services_col.create_index([("is_active", 1), ("display_order", 1)])
@@ -72,8 +96,32 @@ try:
     customers_col.create_index("phone", unique=False)
     customers_col.create_index("lineUserId", unique=False)
     hair_records_col.create_index([("userId", 1), ("customerId", 1), ("date", 1)])
-except Exception:
-    pass
+except Exception as e:
+    logger.warning(f"Index creation warning: {e}")
+
+# ----------------------------------------------------------------------------- #
+# Middleware: Security Check
+# ----------------------------------------------------------------------------- #
+@app.before_request
+def check_origin():
+    """
+    簡單的來源檢查。
+    如果 ALLOWED_ORIGINS 不是 "*"，則檢查 Request Header 中的 Origin。
+    這可以防止部分未授權的跨站請求 (CSRF)。
+    """
+    if request.method == "OPTIONS":
+        return
+
+    # 若設定為允許所有，則跳過檢查
+    if ALLOWED_ORIGINS == "*":
+        return
+
+    request_origin = request.headers.get("Origin")
+    if request_origin:
+        # 如果請求有帶 Origin，必須在白名單內
+        if request_origin not in origins_list:
+            logger.warning(f"Blocked request from unauthorized origin: {request_origin}")
+            abort(403, description="Unauthorized Origin")
 
 # ----------------------------------------------------------------------------- #
 # Utilities
@@ -142,28 +190,31 @@ def verify_cron() -> bool:
 
 # 同步 users -> customers
 def _sync_customer_from_user(user_id: str):
-    u = users_col.find_one({"userId": user_id})
-    if not u:
-        return
-    customers_col.update_one(
-        {"lineUserId": user_id},
-        {
-            "$set": {
-                "lineUserId": user_id,
-                "lineDisplayName": u.get("displayName"),
-                "phone": u.get("phone") or "",
-                "birthday": u.get("birthday") or "",
-                "updatedAt": datetime.utcnow(),
+    try:
+        u = users_col.find_one({"userId": user_id})
+        if not u:
+            return
+        customers_col.update_one(
+            {"lineUserId": user_id},
+            {
+                "$set": {
+                    "lineUserId": user_id,
+                    "lineDisplayName": u.get("displayName"),
+                    "phone": u.get("phone") or "",
+                    "birthday": u.get("birthday") or "",
+                    "updatedAt": datetime.utcnow(),
+                },
+                "$setOnInsert": {
+                    "name": u.get("displayName") or "",
+                    "nickname": "",
+                    "note": "",
+                    "createdAt": datetime.utcnow(),
+                },
             },
-            "$setOnInsert": {
-                "name": u.get("displayName") or "",
-                "nickname": "",
-                "note": "",
-                "createdAt": datetime.utcnow(),
-            },
-        },
-        upsert=True,
-    )
+            upsert=True,
+        )
+    except Exception as e:
+        logger.error(f"Sync customer error: {e}")
 
 # ----------------------------------------------------------------------------- #
 # Google Calendar helpers
@@ -200,13 +251,13 @@ def create_calendar_event(summary: str, description: str, start_local, end_local
 # ----------------------------------------------------------------------------- #
 def send_line_push(user_id: str, message: str) -> bool:
     if not line_bot_api:
-        print("[LINE] LINE_CHANNEL_ACCESS_TOKEN 未設定，跳過推播")
+        logger.warning("[LINE] LINE_CHANNEL_ACCESS_TOKEN 未設定，跳過推播")
         return False
     try:
         line_bot_api.push_message(user_id, TextSendMessage(text=message))
         return True
     except LineBotApiError as e:
-        print(f"[LINE] push error: {e}")
+        logger.error(f"[LINE] push error: {e}")
         return False
 
 # ----------------------------------------------------------------------------- #
@@ -265,6 +316,10 @@ def get_services():
 
 @app.route("/api/bookings", methods=["POST"])
 def create_booking():
+    # [安全性注意] 
+    # 目前此 API 信任前端傳來的 userProfile.userId。
+    # 惡意使用者可能透過 API 工具偽造 userId 進行請求。
+    # 若需更高安全性，建議前端改傳 LIFF ID Token，由後端驗證。
     try:
         payload = request.get_json(force=True)
     except Exception:
@@ -281,18 +336,23 @@ def create_booking():
     svc_ids = list(dict.fromkeys(payload["serviceIds"]))
 
     # upsert 使用者
-    users_col.update_one(
-        {"userId": user_id},
-        {
-            "$set": {
-                "displayName": up.get("displayName"),
-                "pictureUrl": up.get("pictureUrl"),
-                "updatedAt": datetime.utcnow(),
+    try:
+        users_col.update_one(
+            {"userId": user_id},
+            {
+                "$set": {
+                    "displayName": up.get("displayName"),
+                    "pictureUrl": up.get("pictureUrl"),
+                    "updatedAt": datetime.utcnow(),
+                },
+                "$setOnInsert": {"createdAt": datetime.utcnow()},
             },
-            "$setOnInsert": {"createdAt": datetime.utcnow()},
-        },
-        upsert=True,
-    )
+            upsert=True,
+        )
+    except PyMongoError as e:
+        logger.error(f"User update failed: {e}")
+        # 不中斷流程，繼續處理預約
+
     # 同步到 customers
     _sync_customer_from_user(user_id)
 
@@ -327,7 +387,7 @@ def create_booking():
             "updatedAt": datetime.utcnow(),
         }).inserted_id
 
-        # （新）嘗試推播一則「已收到預約申請」訊息（若未加好友會失敗，無礙流程）
+        # 嘗試推播通知
         try:
             svc_names = "、".join([s.get("name","") for s in services_col.find({"_id": {"$in": svc_oids}}, {"name":1})])
             msg = f"已收到您的預約申請：{date} {time}（{svc_names}）。我們將盡快與您確認最終時間。"
@@ -350,7 +410,12 @@ def check_user():
 
 @app.route("/api/users", methods=["PUT"])
 def upsert_user():
-    data = request.get_json(force=True)
+    # [安全性注意] 同樣信任 user_id，未來可升級為 Token 驗證
+    try:
+        data = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "無效的 JSON"}), 400
+        
     user_id = (data or {}).get("userId")
     if not user_id:
         return jsonify({"error": "缺少 userId"}), 400
@@ -369,15 +434,17 @@ def upsert_user():
         "birthday": birthday,
         "updatedAt": datetime.utcnow()
     }
-    users_col.update_one(
-        {"userId": user_id},
-        {"$set": update, "$setOnInsert": {"createdAt": datetime.utcnow()}},
-        upsert=True
-    )
-    _sync_customer_from_user(user_id)
-
-    user = users_col.find_one({"userId": user_id}, {"_id": 0})
-    return jsonify(user), 200
+    try:
+        users_col.update_one(
+            {"userId": user_id},
+            {"$set": update, "$setOnInsert": {"createdAt": datetime.utcnow()}},
+            upsert=True
+        )
+        _sync_customer_from_user(user_id)
+        user = users_col.find_one({"userId": user_id}, {"_id": 0})
+        return jsonify(user), 200
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
 
 # ----------------------------------------------------------------------------- #
 # Admin Routes
@@ -386,45 +453,49 @@ def upsert_user():
 @require_admin
 def admin_list_pending_bookings():
     now_utc = datetime.utcnow()
-    cur = bookings_col.find({"status": "pending", "startAt": {"$gte": now_utc}}).sort("startAt", 1)
-    bookings = list(cur)
+    try:
+        # 只列出尚未過期的預約
+        cur = bookings_col.find({"status": "pending", "startAt": {"$gte": now_utc}}).sort("startAt", 1)
+        bookings = list(cur)
 
-    user_ids = {b.get("userId") for b in bookings if b.get("userId")}
-    svc_oid_set = set()
-    for b in bookings:
-        for sid in b.get("serviceIds", []):
-            try:
-                svc_oid_set.add(ObjectId(sid) if not isinstance(sid, ObjectId) else sid)
-            except Exception:
-                pass
+        user_ids = {b.get("userId") for b in bookings if b.get("userId")}
+        svc_oid_set = set()
+        for b in bookings:
+            for sid in b.get("serviceIds", []):
+                try:
+                    svc_oid_set.add(ObjectId(sid) if not isinstance(sid, ObjectId) else sid)
+                except Exception:
+                    pass
 
-    users_map = {
-        u["userId"]: {"displayName": u.get("displayName"), "phone": u.get("phone")}
-        for u in users_col.find(
-            {"userId": {"$in": list(user_ids)}},
-            {"_id": 0, "userId": 1, "displayName": 1, "phone": 1}
-        )
-    }
-    services_map = {
-        s["_id"]: s.get("name")
-        for s in services_col.find({"_id": {"$in": list(svc_oid_set)}}, {"_id": 1, "name": 1})
-    }
+        users_map = {
+            u["userId"]: {"displayName": u.get("displayName"), "phone": u.get("phone")}
+            for u in users_col.find(
+                {"userId": {"$in": list(user_ids)}},
+                {"_id": 0, "userId": 1, "displayName": 1, "phone": 1}
+            )
+        }
+        services_map = {
+            s["_id"]: s.get("name")
+            for s in services_col.find({"_id": {"$in": list(svc_oid_set)}}, {"_id": 1, "name": 1})
+        }
 
-    def enrich(doc):
-        base = _json_booking(doc)
-        base["user"] = users_map.get(doc.get("userId"), {})
-        base["serviceNames"] = []
-        for sid in doc.get("serviceIds", []):
-            try:
-                key = ObjectId(sid) if not isinstance(sid, ObjectId) else sid
-            except Exception:
-                continue
-            n = services_map.get(key)
-            if n:
-                base["serviceNames"].append(n)
-        return base
+        def enrich(doc):
+            base = _json_booking(doc)
+            base["user"] = users_map.get(doc.get("userId"), {})
+            base["serviceNames"] = []
+            for sid in doc.get("serviceIds", []):
+                try:
+                    key = ObjectId(sid) if not isinstance(sid, ObjectId) else sid
+                except Exception:
+                    continue
+                n = services_map.get(key)
+                if n:
+                    base["serviceNames"].append(n)
+            return base
 
-    return jsonify([enrich(b) for b in bookings]), 200
+        return jsonify([enrich(b) for b in bookings]), 200
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/admin/bookings/<bid>/confirm", methods=["POST"])
 @require_admin
@@ -454,6 +525,7 @@ def admin_confirm_booking(bid):
             return jsonify({"error": "此預約狀態不可確認"}), 400
 
         final_start_local = None
+        # 優先使用 finalStart (YYYY-MM-DDTHH:MM)
         if final_start_str:
             if "T" not in final_start_str:
                 return jsonify({"error": "finalStart 需為 YYYY-MM-DDTHH:MM"}), 400
@@ -488,14 +560,22 @@ def admin_confirm_booking(bid):
             f"電話：{user.get('phone') or ''}",
             f"項目：{svc_names}",
         ]
+        
+        # 寫入 Google Calendar
+        event_link = ""
+        event_id = ""
         try:
             event_id, event_link = create_calendar_event(summary, "\n".join(desc_lines),
                                                          final_start_local, final_end_local)
         except HttpError as he:
+            logger.error(f"Google Calendar HttpError: {he}")
+            # 這裡失敗是否要回傳 500? 目前邏輯是回傳錯誤，因為這是主要功能
             return jsonify({"error": f"建立行事曆事件失敗（HttpError）: {he}"}), 500
         except Exception as e:
+            logger.error(f"Google Calendar Error: {e}")
             return jsonify({"error": f"建立行事曆事件失敗: {e}"}), 500
 
+        # 更新 DB
         bookings_col.update_one(
             {"_id": ObjectId(bid)},
             {"$set": {
@@ -508,6 +588,7 @@ def admin_confirm_booking(bid):
             }}
         )
 
+        # 建立推播提醒
         due_local = final_start_local - timedelta(hours=2)
         reminder_id = None
         if due_local > datetime.now(tz=TAIPEI):
@@ -528,6 +609,7 @@ def admin_confirm_booking(bid):
         return jsonify({"ok": True, "calendarHtmlLink": event_link, "reminderCreated": bool(reminder_id)}), 200
 
     except Exception as e:
+        logger.error(f"Confirm Booking Error: {e}")
         return jsonify({"error": str(e)}), 500
 
 # 顧客管理
@@ -543,17 +625,24 @@ def admin_list_customers():
             {"lineDisplayName": {"$regex": keyword, "$options": "i"}},
             {"nickname": {"$regex": keyword, "$options": "i"}},
         ]
-    cur = customers_col.find(q).sort("updatedAt", -1).limit(200)
-    data = []
-    for c in cur:
-        c["_id"] = str(c["_id"])
-        data.append(c)
-    return jsonify(data), 200
+    try:
+        cur = customers_col.find(q).sort("updatedAt", -1).limit(200)
+        data = []
+        for c in cur:
+            c["_id"] = str(c["_id"])
+            data.append(c)
+        return jsonify(data), 200
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/admin/customers", methods=["POST"])
 @require_admin
 def admin_create_customer():
-    d = request.get_json(force=True)
+    try:
+        d = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "無效的 JSON"}), 400
+
     name = (d or {}).get("name", "").strip()
     phone = (d or {}).get("phone", "").strip()
     birthday = (d or {}).get("birthday", "").strip()
@@ -568,13 +657,20 @@ def admin_create_customer():
         "createdAt": datetime.utcnow(),
         "updatedAt": datetime.utcnow()
     }
-    cid = customers_col.insert_one(doc).inserted_id
-    return jsonify({"_id": str(cid)}), 201
+    try:
+        cid = customers_col.insert_one(doc).inserted_id
+        return jsonify({"_id": str(cid)}), 201
+    except PyMongoError as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/admin/customers/<cid>", methods=["PATCH"])
 @require_admin
 def admin_update_customer(cid):
-    d = request.get_json(force=True)
+    try:
+        d = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "無效的 JSON"}), 400
+
     update = {}
     for k in ["name", "nickname", "phone", "birthday", "note"]:
         if k in d:
@@ -584,25 +680,32 @@ def admin_update_customer(cid):
     try:
         customers_col.update_one({"_id": ObjectId(cid)}, {"$set": {**update, "updatedAt": datetime.utcnow()}})
         return jsonify({"ok": True}), 200
-    except Exception:
-        return jsonify({"error": "不合法的顧客 ID"}), 400
+    except Exception as e:
+        return jsonify({"error": f"更新失敗: {e}"}), 400
 
 # 一鍵回填：把所有 users 同步到 customers（解決舊客沒出現）
 @app.route("/api/admin/customers/sync-users", methods=["POST"])
 @require_admin
 def admin_sync_users_to_customers():
     count = 0
-    for u in users_col.find({}, {"userId": 1}):
-        if u.get("userId"):
-            _sync_customer_from_user(u["userId"])
-            count += 1
-    return jsonify({"ok": True, "synced": count}), 200
+    try:
+        for u in users_col.find({}, {"userId": 1}):
+            if u.get("userId"):
+                _sync_customer_from_user(u["userId"])
+                count += 1
+        return jsonify({"ok": True, "synced": count}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # 染燙/消費紀錄
 @app.route("/api/admin/hair-records", methods=["POST"])
 @require_admin
 def admin_create_hair_record():
-    d = request.get_json(force=True)
+    try:
+        d = request.get_json(force=True)
+    except Exception:
+        return jsonify({"error": "無效的 JSON"}), 400
+
     user_id = d.get("userId")
     customer_id = d.get("customerId")
     if not user_id and not customer_id:
@@ -613,19 +716,22 @@ def admin_create_hair_record():
     items = d.get("items") or []
     amount = int(d.get("amount", 0))
 
-    rid = hair_records_col.insert_one({
-        "userId": user_id,
-        "customerId": ObjectId(customer_id) if customer_id else None,
-        "date": date,
-        "items": items,
-        "amount": amount,
-        "formula1": d.get("formula1", ""),
-        "formula2": d.get("formula2", ""),
-        "notes": d.get("notes", ""),
-        "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow()
-    }).inserted_id
-    return jsonify({"_id": str(rid)}), 201
+    try:
+        rid = hair_records_col.insert_one({
+            "userId": user_id,
+            "customerId": ObjectId(customer_id) if customer_id else None,
+            "date": date,
+            "items": items,
+            "amount": amount,
+            "formula1": d.get("formula1", ""),
+            "formula2": d.get("formula2", ""),
+            "notes": d.get("notes", ""),
+            "createdAt": datetime.utcnow(),
+            "updatedAt": datetime.utcnow()
+        }).inserted_id
+        return jsonify({"_id": str(rid)}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/admin/hair-records", methods=["GET"])
 @require_admin
@@ -640,31 +746,41 @@ def admin_list_hair_records():
             q["customerId"] = ObjectId(customer_id)
         except Exception:
             return jsonify({"error": "不合法的 customerId"}), 400
-    cur = hair_records_col.find(q).sort("date", -1).limit(200)
-    data = []
-    for r in cur:
-        r["_id"] = str(r["_id"])
-        if r.get("customerId"):
-            r["customerId"] = str(r["customerId"])
-        data.append(r)
-    return jsonify(data), 200
+    try:
+        cur = hair_records_col.find(q).sort("date", -1).limit(200)
+        data = []
+        for r in cur:
+            r["_id"] = str(r["_id"])
+            if r.get("customerId"):
+                r["customerId"] = str(r["customerId"])
+            data.append(r)
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # 服務管理
 @app.route("/api/admin/services", methods=["GET"])
 @require_admin
 def admin_list_services():
-    cur = services_col.find({}, {"name": 1, "price": 1, "is_active": 1, "display_order": 1}).sort("display_order", 1)
-    data = [
-        {"_id": str(s["_id"]), "name": s.get("name", ""), "price": int(s.get("price", 0)),
-         "is_active": bool(s.get("is_active", True)), "display_order": int(s.get("display_order", 0))}
-        for s in cur
-    ]
-    return jsonify(data), 200
+    try:
+        cur = services_col.find({}, {"name": 1, "price": 1, "is_active": 1, "display_order": 1}).sort("display_order", 1)
+        data = [
+            {"_id": str(s["_id"]), "name": s.get("name", ""), "price": int(s.get("price", 0)),
+             "is_active": bool(s.get("is_active", True)), "display_order": int(s.get("display_order", 0))}
+            for s in cur
+        ]
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/admin/services", methods=["POST"])
 @require_admin
 def admin_create_service():
-    d = request.get_json(force=True) or {}
+    try:
+        d = request.get_json(force=True) or {}
+    except Exception:
+        return jsonify({"error": "無效的 JSON"}), 400
+
     name = (d.get("name") or "").strip()
     try:
         price = int(d.get("price", 0))
@@ -675,20 +791,27 @@ def admin_create_service():
     if not name:
         return jsonify({"error": "name 必填"}), 400
 
-    sid = services_col.insert_one({
-        "name": name,
-        "price": price,
-        "display_order": display_order,
-        "is_active": is_active,
-        "createdAt": datetime.utcnow(),
-        "updatedAt": datetime.utcnow()
-    }).inserted_id
-    return jsonify({"_id": str(sid)}), 201
+    try:
+        sid = services_col.insert_one({
+            "name": name,
+            "price": price,
+            "display_order": display_order,
+            "is_active": is_active,
+            "createdAt": datetime.utcnow(),
+            "updatedAt": datetime.utcnow()
+        }).inserted_id
+        return jsonify({"_id": str(sid)}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/admin/services/<sid>", methods=["PATCH"])
 @require_admin
 def admin_update_service(sid):
-    d = request.get_json(force=True) or {}
+    try:
+        d = request.get_json(force=True) or {}
+    except Exception:
+        return jsonify({"error": "無效的 JSON"}), 400
+
     update = {}
     if "name" in d:
         name = (d.get("name") or "").strip()
@@ -715,7 +838,7 @@ def admin_update_service(sid):
         services_col.update_one({"_id": ObjectId(sid)}, {"$set": {**update, "updatedAt": datetime.utcnow()}})
         return jsonify({"ok": True}), 200
     except Exception:
-        return jsonify({"error": "不合法的服務 ID"}), 400
+        return jsonify({"error": "不合法的服務 ID 或更新失敗"}), 400
 
 # Cron：派送提醒
 @app.route("/api/admin/cron/dispatch", methods=["GET", "POST"])
@@ -725,40 +848,45 @@ def cron_dispatch():
 
     now_utc = datetime.utcnow()
     processed = 0
+    # 限制每次處理數量，避免超時
     for _ in range(50):
-        r = reminders_col.find_one_and_update(
-            {"status": "scheduled", "dueAt": {"$lte": now_utc}},
-            {"$set": {"status": "sending", "updatedAt": datetime.utcnow()}},
-            sort=[("dueAt", 1)]
-        )
-        if not r:
-            break
-
-        ok = False
         try:
-            if r.get("channel") == "line" and r.get("userId") and r.get("message"):
-                ok = send_line_push(r["userId"], r["message"])
-        except Exception as e:
-            ok = False
-            print(f"[CRON] send error: {e}")
-
-        if ok:
-            reminders_col.update_one(
-                {"_id": r["_id"]},
-                {"$set": {"status": "sent", "sentAt": datetime.utcnow(), "updatedAt": datetime.utcnow()}}
+            r = reminders_col.find_one_and_update(
+                {"status": "scheduled", "dueAt": {"$lte": now_utc}},
+                {"$set": {"status": "sending", "updatedAt": datetime.utcnow()}},
+                sort=[("dueAt", 1)]
             )
-        else:
-            if r.get("attempts", 0) + 1 >= MAX_ATTEMPTS:
+            if not r:
+                break
+
+            ok = False
+            try:
+                if r.get("channel") == "line" and r.get("userId") and r.get("message"):
+                    ok = send_line_push(r["userId"], r["message"])
+            except Exception as e:
+                ok = False
+                logger.error(f"[CRON] send error: {e}")
+
+            if ok:
                 reminders_col.update_one(
                     {"_id": r["_id"]},
-                    {"$set": {"status": "failed", "updatedAt": datetime.utcnow()}, "$inc": {"attempts": 1}}
+                    {"$set": {"status": "sent", "sentAt": datetime.utcnow(), "updatedAt": datetime.utcnow()}}
                 )
             else:
-                reminders_col.update_one(
-                    {"_id": r["_id"]},
-                    {"$inc": {"attempts": 1}, "$set": {"status": "scheduled", "updatedAt": datetime.utcnow()}}
-                )
-        processed += 1
+                if r.get("attempts", 0) + 1 >= MAX_ATTEMPTS:
+                    reminders_col.update_one(
+                        {"_id": r["_id"]},
+                        {"$set": {"status": "failed", "updatedAt": datetime.utcnow()}, "$inc": {"attempts": 1}}
+                    )
+                else:
+                    reminders_col.update_one(
+                        {"_id": r["_id"]},
+                        {"$inc": {"attempts": 1}, "$set": {"status": "scheduled", "updatedAt": datetime.utcnow()}}
+                    )
+            processed += 1
+        except Exception as e:
+            logger.error(f"Cron loop error: {e}")
+            break
 
     return jsonify({"ok": True, "processed": processed}), 200
 
@@ -775,19 +903,24 @@ def admin_diag_google():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-# （新）簡單推播 API：後台測試用
+# 簡單推播 API：後台測試用
 @app.route("/api/admin/push", methods=["POST"])
 @require_admin
 def admin_push():
-    data = request.get_json(force=True) or {}
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return jsonify({"error": "無效的 JSON"}), 400
+
     user_id = (data.get("userId") or "").strip()
     text = (data.get("text") or "").strip()
     if not user_id or not text:
         return jsonify({"error": "缺少 userId 或 text"}), 400
+    
     ok = send_line_push(user_id, text)
     if ok:
         return jsonify({"ok": True}), 200
-    return jsonify({"ok": False, "error": "LINE push 失敗（多半是尚未加好友）"}), 502
+    return jsonify({"ok": False, "error": "LINE push 失敗（可能尚未加好友或 Token 無效）"}), 502
 
 # ----------------------------------------------------------------------------- #
 # Main

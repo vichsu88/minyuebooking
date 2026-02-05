@@ -232,8 +232,20 @@
 
 <script>
 // --- 設定區 ---
+// 建議：將此 URL 提取到獨立的 config.js 檔案中，以便於環境切換
 const BACKEND_URL = "https://minyue-api.onrender.com";
 let adminToken = "";
+
+// --- 安全性工具：HTML 轉義 (XSS 防護) ---
+function escapeHtml(text) {
+  if (text === null || text === undefined) return "";
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
 // --- DOM 元素 ---
 const authSection = document.getElementById('auth-section');
@@ -296,6 +308,7 @@ setTokenBtn.addEventListener('click', () => {
   const token = adminTokenInput.value.trim();
   if (!token) { alert('請輸入 Admin Token！'); return; }
   adminToken = token;
+  // 優化：可以考慮將 token 暫存於 sessionStorage
   authSection.style.display = 'none';
   adminPanel.style.display = 'block';
   initAdminPanel();
@@ -329,7 +342,7 @@ function initAdminPanel() {
 
 // --- 工具：日期格式 ---
 function toDatetimeLocal(isoString) {
-  // isoString 例如 '2025-08-20T10:00:00+08:00'
+  if (!isoString) return "";
   const d = new Date(isoString);
   const pad = n => String(n).padStart(2, '0');
   const yyyy = d.getFullYear();
@@ -345,7 +358,6 @@ async function handleFetchBookings() {
   bookingsList.innerHTML = '';
   showMessage('讀取中，請稍候...', 'loading');
   try {
-    // 注意：路由改為 /pending（與後端一致）
     const bookings = await apiFetch('/api/admin/bookings/pending');
     hideMessage();
     displayBookings(bookings);
@@ -360,11 +372,13 @@ function displayBookings(bookings) {
     return;
   }
   bookingsList.innerHTML = bookings.map(b => {
-    const customerName = (b.user && b.user.displayName) ? b.user.displayName : 'LINE 使用者';
-    const phone = (b.user && b.user.phone) ? b.user.phone : '-';
-    const svc = (b.serviceNames && b.serviceNames.length) ? b.serviceNames.join('、') : '(未取得)';
+    // 安全性修正：對顯示資料進行轉義
+    const customerName = escapeHtml((b.user && b.user.displayName) ? b.user.displayName : 'LINE 使用者');
+    const phone = escapeHtml((b.user && b.user.phone) ? b.user.phone : '-');
+    const svc = escapeHtml((b.serviceNames && b.serviceNames.length) ? b.serviceNames.join('、') : '(未取得)');
     const when = b.startAtLocal ? new Date(b.startAtLocal).toLocaleString('zh-TW') : '-';
     const defaultFinal = b.startAtLocal ? toDatetimeLocal(b.startAtLocal) : '';
+    
     return `
       <div class="item-card">
         <p><strong>姓名:</strong> ${customerName}</p>
@@ -390,7 +404,6 @@ async function handleConfirmBooking(bookingId) {
     await apiFetch(`/api/admin/bookings/${bookingId}/confirm`, {
       method: 'POST',
       body: JSON.stringify({
-        // 後端已支援 finalStart（YYYY-MM-DDTHH:MM）
         finalStart: val,
         durationMins: 90
       })
@@ -415,13 +428,15 @@ async function handleFetchCustomers() {
 }
 
 function renderCustomerList(list) {
+  // 安全性修正：對列表資料進行轉義
   customerList.innerHTML = list.map(c => `
     <div class="customer-list-item" data-id="${c._id}">
-      <div><strong>${c.name || '(未命名)'}</strong></div>
-      <div>${c.phone || '-'}</div>
-      <div>${c.birthday || ''}</div>
+      <div><strong>${escapeHtml(c.name || '(未命名)')}</strong></div>
+      <div>${escapeHtml(c.phone || '-')}</div>
+      <div>${escapeHtml(c.birthday || '')}</div>
     </div>
   `).join('');
+  
   customerList.querySelectorAll('.customer-list-item').forEach(el => {
     el.addEventListener('click', () => {
       customerList.querySelectorAll('.customer-list-item').forEach(x => x.classList.remove('selected'));
@@ -434,24 +449,25 @@ function renderCustomerList(list) {
 }
 
 function renderCustomerDetails(c) {
+  // 安全性修正：對 input value 和 textarea 內容進行轉義
   customerDetails.innerHTML = `
     <div class="card">
       <h3>顧客資料</h3>
       <div class="input-group">
         <label>姓名</label>
-        <input type="text" id="cust_name" value="${c.name || ''}">
+        <input type="text" id="cust_name" value="${escapeHtml(c.name || '')}">
       </div>
       <div class="input-group">
         <label>手機（09開頭10碼）</label>
-        <input type="text" id="cust_phone" value="${c.phone || ''}">
+        <input type="text" id="cust_phone" value="${escapeHtml(c.phone || '')}">
       </div>
       <div class="input-group">
         <label>生日</label>
-        <input type="date" id="cust_birthday" value="${c.birthday || ''}">
+        <input type="date" id="cust_birthday" value="${escapeHtml(c.birthday || '')}">
       </div>
       <div class="input-group">
         <label>備註</label>
-        <textarea id="cust_note">${c.note || ''}</textarea>
+        <textarea id="cust_note">${escapeHtml(c.note || '')}</textarea>
       </div>
       <button class="btn-success" id="save_customer_btn">儲存</button>
     </div>
@@ -488,14 +504,15 @@ function renderCustomerDetails(c) {
 async function loadHairRecords(customerId) {
   try {
     const list = await apiFetch(`/api/admin/hair-records?customerId=${encodeURIComponent(customerId)}`);
+    // 安全性修正：對紀錄內容進行轉義
     const html = list.map(r => `
       <div class="item-card">
-        <p><strong>日期：</strong>${r.date}</p>
-        <p><strong>項目：</strong>${Array.isArray(r.items) ? r.items.join('、') : ''}</p>
+        <p><strong>日期：</strong>${escapeHtml(r.date)}</p>
+        <p><strong>項目：</strong>${escapeHtml(Array.isArray(r.items) ? r.items.join('、') : '')}</p>
         <p><strong>消費：</strong>$${(r.amount || 0).toLocaleString()}</p>
-        <p><strong>1劑：</strong>${r.formula1 || ''}</p>
-        <p><strong>2劑：</strong>${r.formula2 || ''}</p>
-        <p><strong>說明：</strong>${r.notes || ''}</p>
+        <p><strong>1劑：</strong>${escapeHtml(r.formula1 || '')}</p>
+        <p><strong>2劑：</strong>${escapeHtml(r.formula2 || '')}</p>
+        <p><strong>說明：</strong>${escapeHtml(r.notes || '')}</p>
       </div>
     `).join('');
     document.getElementById('hair_records').innerHTML = html || '<p>目前沒有紀錄。</p>';
@@ -525,7 +542,6 @@ function openAddCustomerForm() {
       showMessage('顧客已建立', 'success');
       closeModal();
       handleFetchCustomers();
-      // 自動選中
       setTimeout(() => {
         const el = customerList.querySelector(`[data-id="${r._id}"]`);
         el && el.click();
@@ -577,7 +593,7 @@ async function handleFetchServices() {
       <div class="item-card" data-id="${s._id}">
         <div class="input-group">
           <label>名稱</label>
-          <input type="text" class="svc_name" value="${s.name}">
+          <input type="text" class="svc_name" value="${escapeHtml(s.name)}">
         </div>
         <div class="input-group">
           <label>售價</label>
@@ -650,7 +666,6 @@ function debounce(fn, wait=300) {
   };
 }
 </script>
-
 
 </body>
 </html>

@@ -15,7 +15,46 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="assets/css/style.css?v=2.4"> 
+  <link rel="stylesheet" href="assets/css/style.css?v=2.5"> 
+  <style>
+    /* 頁面專屬微調樣式 (可之後移入 style.css) */
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #666;
+      margin-top: 15px;
+      font-size: 1rem;
+      padding: 12px 30px;
+    }
+    .booking-card {
+      background: #f9f9f9;
+      border-radius: 8px;
+      padding: 15px;
+      margin-bottom: 15px;
+      border-left: 5px solid #ccc;
+      text-align: left;
+    }
+    .booking-card.status-pending { border-left-color: #f39c12; }
+    .booking-card.status-confirmed { border-left-color: #2ecc71; }
+    .booking-card.status-cancelled { border-left-color: #e74c3c; opacity: 0.7; }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: #fff;
+      font-size: 0.8rem;
+      margin-bottom: 8px;
+    }
+    .badge-pending { background: #f39c12; }
+    .badge-confirmed { background: #2ecc71; }
+    .badge-cancelled { background: #e74c3c; }
+
+    .success-icon {
+      font-size: 4rem;
+      color: #2ecc71;
+      margin-bottom: 20px;
+    }
+  </style>
 </head>
 <body>
 
@@ -24,15 +63,18 @@
   </div>
 
   <main id="main-content">
+    
     <div id="welcome-screen" class="container">
       <div class="content-box">
-        <h1>預約流程說明</h1>
+        <h1>茗月髮型設計</h1>
         <p>
-          為了提供您最專屬的服務，我們的預約將採兩階段確認。
-          請您先選擇期望的日期與時段，送出請求後，我們將
-          會透過 LINE 官方帳號與您確認最終的預約時間。
+          歡迎使用線上預約系統。<br>
+          請選擇您期望的時段，我們將盡快確認安排。
         </p>
-        <button id="agreeButton" class="cta-button">我了解，開始預約</button>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <button id="agreeButton" class="cta-button">我要預約</button>
+          <button id="checkMyBookingsBtn" class="cta-button" style="background-color: #9b59b6;">我的預約</button>
+        </div>
       </div>
     </div>
 
@@ -49,18 +91,7 @@
         <div class="form-row">
           <label class="form-label" for="time-slot">選擇時段：</label>
           <select id="time-slot" class="form-input" required>
-            <option value="" disabled selected>請選擇時段</option>
-            <option value="09:00">早上 09:00</option>
-            <option value="10:00">早上 10:00</option>
-            <option value="11:00">早上 11:00</option>
-            <option value="12:00">中午 12:00</option>
-            <option value="13:00">下午 13:00</option>
-            <option value="14:00">下午 14:00</option>
-            <option value="15:00">下午 15:00</option>
-            <option value="16:00">下午 16:00</option>
-            <option value="17:00">下午 17:00</option>
-            <option value="18:00">晚上 18:00</option>
-            <option value="19:00">晚上 19:00</option>
+            <option value="" disabled selected>請先選擇日期</option>
           </select>
         </div>
 
@@ -75,8 +106,28 @@
           <button type="button" id="priceListButton" class="form-button">價目表</button>
           <button type="submit" class="form-button submit">送出預約</button>
         </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+            <a href="#" id="backToHomeBtn" style="color: #666; text-decoration: underline;">返回首頁</a>
+        </div>
       </form>
     </div>
+
+    <div id="success-screen" class="container" style="display:none; text-align: center;">
+      <div class="content-box">
+        <div class="success-icon">✓</div>
+        <h1>預約申請已送出！</h1>
+        <p>
+          我們已收到您的預約請求。<br>
+          系統將通知設計師進行確認，<br>
+          請留意您的 LINE 通知。
+        </p>
+        <button id="successViewBookingsBtn" class="cta-button">查看我的預約</button>
+        <br><br>
+        <button id="successHomeBtn" class="cta-button btn-secondary">返回首頁</button>
+      </div>
+    </div>
+
   </main>
 
   <div id="price-list-modal" class="modal-overlay hidden">
@@ -91,6 +142,7 @@
     <div class="modal-content">
       <button id="closeRegisterModal" class="close-button" aria-label="關閉註冊視窗">&times;</button>
       <h2>第一次使用請先完成基本資料</h2>
+      <p style="font-size: 0.9rem; color: #666; margin-bottom: 15px;">為了方便聯繫與確認預約，請填寫正確的手機號碼。</p>
       <form id="register-form">
         <div class="form-row">
           <label class="form-label" for="reg-phone">手機：</label>
@@ -101,16 +153,24 @@
           <input type="date" id="reg-birthday" class="form-input" required>
         </div>
         <div class="button-group">
-          <button type="submit" class="form-button submit">儲存</button>
+          <button type="submit" class="form-button submit">儲存資料</button>
         </div>
       </form>
     </div>
   </div>
 
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  
-  <script src="config.js"></script>
+  <div id="my-bookings-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <button id="closeMyBookingsBtn" class="close-button" aria-label="關閉">&times;</button>
+      <h2>我的預約紀錄</h2>
+      <div id="my-bookings-list" style="max-height: 60vh; overflow-y: auto;">
+        <p style="text-align:center; color:#999;">載入中...</p>
+      </div>
+    </div>
+  </div>
 
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="config.js"></script>
   <script src="main.js"></script>
 </body>
 </html>

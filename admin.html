@@ -109,15 +109,26 @@
             padding: 15px;
             margin-bottom: 15px;
             border-radius: 6px;
+            position: relative;
         }
         .item-card p { margin: 5px 0; }
         .item-card strong { color: #555; }
+
+        /* 預約管理按鈕區 */
+        .booking-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
         
         /* 顧客管理介面 */
         .customer-layout {
             display: grid;
             grid-template-columns: 350px 1fr;
             gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .customer-layout { grid-template-columns: 1fr; }
         }
         #customer-list-container, #customer-detail-container {
             max-height: 70vh;
@@ -127,6 +138,7 @@
             padding: 10px;
             cursor: pointer;
             border-radius: 4px;
+            border-bottom: 1px solid #eee;
         }
         .customer-list-item:hover, .customer-list-item.selected {
             background-color: #ecf0f1;
@@ -195,7 +207,7 @@
 
             <div id="bookings-tab" class="tab-content active">
                 <h2>待處理預約</h2>
-                <button id="fetch-bookings-btn">讀取待確認的預約</button>
+                <button id="fetch-bookings-btn">重新整理</button>
                 <div id="bookings-list" class="item-list"></div>
             </div>
 
@@ -209,7 +221,7 @@
                     </div>
                     <div id="customer-detail-container">
                         <div id="customer-details">
-                            <p>請從左側選擇一位顧客來查看詳細資料。</p>
+                            <p style="padding: 20px; color: #666;">請從左側選擇一位顧客來查看詳細資料。</p>
                         </div>
                     </div>
                 </div>
@@ -234,7 +246,6 @@
 
 <script>
 // --- 設定區 ---
-// 這裡改為從 config.js 讀取，不再寫死
 if (typeof CONFIG === 'undefined' || !CONFIG.BACKEND_BASE_URL) {
     alert('錯誤：找不到 config.js 或設定檔內容有誤！');
     throw new Error('CONFIG is missing');
@@ -282,6 +293,10 @@ function showMessage(text, type) {
   messageArea.className = '';
   messageArea.classList.add(`message-${type}`);
   messageArea.style.display = 'block';
+  // 3秒後自動消失成功訊息
+  if (type === 'success') {
+      setTimeout(() => { messageArea.style.display = 'none'; }, 3000);
+  }
 }
 function hideMessage() { messageArea.style.display = 'none'; }
 
@@ -315,7 +330,6 @@ setTokenBtn.addEventListener('click', () => {
   const token = adminTokenInput.value.trim();
   if (!token) { alert('請輸入 Admin Token！'); return; }
   adminToken = token;
-  // 優化：可以考慮將 token 暫存於 sessionStorage
   authSection.style.display = 'none';
   adminPanel.style.display = 'block';
   initAdminPanel();
@@ -323,7 +337,6 @@ setTokenBtn.addEventListener('click', () => {
 
 // === 導覽與初始化 ===
 function initAdminPanel() {
-  // 預設讀取預約
   handleFetchBookings();
 
   document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -344,7 +357,7 @@ function initAdminPanel() {
   fetchBookingsBtn.addEventListener('click', handleFetchBookings);
   addServiceBtn.addEventListener('click', openAddServiceForm);
   addCustomerBtn.addEventListener('click', openAddCustomerForm);
-  customerSearchInput.addEventListener('input', debounce(handleFetchCustomers, 300));
+  customerSearchInput.addEventListener('input', debounce(handleFetchCustomers, 500));
 }
 
 // --- 工具：日期格式 ---
@@ -362,11 +375,9 @@ function toDatetimeLocal(isoString) {
 
 // === 1) 預約管理 ===
 async function handleFetchBookings() {
-  bookingsList.innerHTML = '';
-  showMessage('讀取中，請稍候...', 'loading');
+  bookingsList.innerHTML = '<p>讀取中...</p>';
   try {
     const bookings = await apiFetch('/api/admin/bookings/pending');
-    hideMessage();
     displayBookings(bookings);
   } catch (err) {
     showMessage(`讀取預約失敗：${err.message}`, 'error');
@@ -379,11 +390,11 @@ function displayBookings(bookings) {
     return;
   }
   bookingsList.innerHTML = bookings.map(b => {
-    // 安全性修正：對顯示資料進行轉義
     const customerName = escapeHtml((b.user && b.user.displayName) ? b.user.displayName : 'LINE 使用者');
     const phone = escapeHtml((b.user && b.user.phone) ? b.user.phone : '-');
     const svc = escapeHtml((b.serviceNames && b.serviceNames.length) ? b.serviceNames.join('、') : '(未取得)');
     const when = b.startAtLocal ? new Date(b.startAtLocal).toLocaleString('zh-TW') : '-';
+    // 預設填入時間：若顧客選的 startAt 存在，直接轉成 datetime-local 格式供確認
     const defaultFinal = b.startAtLocal ? toDatetimeLocal(b.startAtLocal) : '';
     
     return `
@@ -391,36 +402,62 @@ function displayBookings(bookings) {
         <p><strong>姓名:</strong> ${customerName}</p>
         <p><strong>服務項目:</strong> ${svc}</p>
         <p><strong>聯絡電話:</strong> ${phone}</p>
-        <p><strong>顧客期望時間:</strong> ${when}</p>
-        <div class="input-group">
-          <label for="final_time_${b._id}"><strong>確認最終時間:</strong></label>
+        <p><strong>期望時間:</strong> ${when}</p>
+        <div class="input-group" style="margin-top:10px;">
+          <label for="final_time_${b._id}"><strong>確認/調整最終時間:</strong></label>
           <input type="datetime-local" id="final_time_${b._id}" value="${defaultFinal}">
         </div>
-        <button class="btn-success" onclick="handleConfirmBooking('${b._id}')">確認此預約</button>
+        <div class="booking-actions">
+            <button class="btn-success" onclick="handleConfirmBooking('${b._id}')">確認預約</button>
+            <button class="btn-danger" onclick="handleRejectBooking('${b._id}')">婉拒預約</button>
+        </div>
       </div>
     `;
   }).join('');
 }
 
+// 確認預約
 async function handleConfirmBooking(bookingId) {
   const input = document.getElementById(`final_time_${bookingId}`);
   const val = input.value;
   if (!val) { alert('請選擇一個最終確認的時間！'); return; }
+  
+  if (!confirm('確定要確認此預約並寫入 Google Calendar 嗎？')) return;
+
   showMessage('正在確認預約...', 'loading');
   try {
     await apiFetch(`/api/admin/bookings/${bookingId}/confirm`, {
       method: 'POST',
       body: JSON.stringify({
         finalStart: val,
-        durationMins: 90
+        durationMins: 90 // 預設 90 分鐘
       })
     });
     showMessage('預約已成功確認！', 'success');
-    setTimeout(handleFetchBookings, 1000);
+    handleFetchBookings(); // 重新整理列表
   } catch (err) {
     showMessage(`確認失敗：${err.message}`, 'error');
   }
 }
+
+// 婉拒預約 (New Function)
+async function handleRejectBooking(bookingId) {
+    const reason = prompt('請輸入婉拒原因（選填，將發送 LINE 給顧客）：', '目前該時段已滿，請參考其他時段。');
+    if (reason === null) return; // 按下取消
+
+    showMessage('正在婉拒預約...', 'loading');
+    try {
+        await apiFetch(`/api/admin/bookings/${bookingId}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({ reason: reason })
+        });
+        showMessage('已婉拒該預約', 'success');
+        handleFetchBookings();
+    } catch (err) {
+        showMessage(`操作失敗：${err.message}`, 'error');
+    }
+}
+
 
 // === 2) 顧客管理 ===
 async function handleFetchCustomers() {
@@ -428,19 +465,18 @@ async function handleFetchCustomers() {
   try {
     const list = await apiFetch(`/api/admin/customers${q ? `?q=${encodeURIComponent(q)}` : ''}`);
     renderCustomerList(list);
-    customerDetails.innerHTML = '<p>請從左側選擇一位顧客來查看詳細資料。</p>';
   } catch (err) {
     showMessage(`讀取顧客失敗：${err.message}`, 'error');
   }
 }
 
 function renderCustomerList(list) {
-  // 安全性修正：對列表資料進行轉義
   customerList.innerHTML = list.map(c => `
     <div class="customer-list-item" data-id="${c._id}">
       <div><strong>${escapeHtml(c.name || '(未命名)')}</strong></div>
-      <div>${escapeHtml(c.phone || '-')}</div>
-      <div>${escapeHtml(c.birthday || '')}</div>
+      <div style="font-size:0.9em; color:#666;">
+        ${escapeHtml(c.phone || '-')} / ${escapeHtml(c.birthday || '')}
+      </div>
     </div>
   `).join('');
   
@@ -456,7 +492,6 @@ function renderCustomerList(list) {
 }
 
 function renderCustomerDetails(c) {
-  // 安全性修正：對 input value 和 textarea 內容進行轉義
   customerDetails.innerHTML = `
     <div class="card">
       <h3>顧客資料</h3>
@@ -476,15 +511,15 @@ function renderCustomerDetails(c) {
         <label>備註</label>
         <textarea id="cust_note">${escapeHtml(c.note || '')}</textarea>
       </div>
-      <button class="btn-success" id="save_customer_btn">儲存</button>
+      <button class="btn-success" id="save_customer_btn">儲存更新</button>
     </div>
 
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <h3>消費/染燙紀錄</h3>
-        <button class="btn-secondary" id="add_record_btn">新增紀錄</button>
+        <button class="btn-secondary" id="add_record_btn" style="width:auto;">新增紀錄</button>
       </div>
-      <div id="hair_records"></div>
+      <div id="hair_records" style="margin-top:15px;">載入中...</div>
     </div>
   `;
 
@@ -497,8 +532,8 @@ function renderCustomerDetails(c) {
         note: document.getElementById('cust_note').value
       };
       await apiFetch(`/api/admin/customers/${c._id}`, { method: 'PATCH', body: JSON.stringify(body) });
-      showMessage('顧客已更新', 'success');
-      handleFetchCustomers();
+      showMessage('顧客資料已更新', 'success');
+      handleFetchCustomers(); // 刷新列表確保資料一致
     } catch (err) {
       showMessage(`更新失敗：${err.message}`, 'error');
     }
@@ -511,20 +546,18 @@ function renderCustomerDetails(c) {
 async function loadHairRecords(customerId) {
   try {
     const list = await apiFetch(`/api/admin/hair-records?customerId=${encodeURIComponent(customerId)}`);
-    // 安全性修正：對紀錄內容進行轉義
     const html = list.map(r => `
       <div class="item-card">
         <p><strong>日期：</strong>${escapeHtml(r.date)}</p>
         <p><strong>項目：</strong>${escapeHtml(Array.isArray(r.items) ? r.items.join('、') : '')}</p>
-        <p><strong>消費：</strong>$${(r.amount || 0).toLocaleString()}</p>
-        <p><strong>1劑：</strong>${escapeHtml(r.formula1 || '')}</p>
-        <p><strong>2劑：</strong>${escapeHtml(r.formula2 || '')}</p>
-        <p><strong>說明：</strong>${escapeHtml(r.notes || '')}</p>
+        <p><strong>金額：</strong>$${(r.amount || 0).toLocaleString()}</p>
+        <p><strong>1劑/2劑：</strong>${escapeHtml(r.formula1 || '-')} / ${escapeHtml(r.formula2 || '-')}</p>
+        <p style="color:#666; font-size:0.9em;">${escapeHtml(r.notes || '')}</p>
       </div>
     `).join('');
-    document.getElementById('hair_records').innerHTML = html || '<p>目前沒有紀錄。</p>';
+    document.getElementById('hair_records').innerHTML = html || '<p style="color:#999;">目前沒有紀錄。</p>';
   } catch (err) {
-    showMessage(`讀取紀錄失敗：${err.message}`, 'error');
+    document.getElementById('hair_records').innerHTML = `<p style="color:red;">讀取紀錄失敗</p>`;
   }
 }
 
@@ -532,7 +565,7 @@ function openAddCustomerForm() {
   openModal(`
     <h3>新增顧客</h3>
     <div class="input-group"><label>姓名</label><input id="new_c_name" type="text"></div>
-    <div class="input-group"><label>手機（09開頭10碼）</label><input id="new_c_phone" type="text" placeholder="09xxxxxxxx"></div>
+    <div class="input-group"><label>手機</label><input id="new_c_phone" type="text" placeholder="09xxxxxxxx"></div>
     <div class="input-group"><label>生日</label><input id="new_c_bday" type="date"></div>
     <div class="input-group"><label>備註</label><textarea id="new_c_note"></textarea></div>
     <button id="new_c_save" class="btn-success">建立</button>
@@ -549,24 +582,20 @@ function openAddCustomerForm() {
       showMessage('顧客已建立', 'success');
       closeModal();
       handleFetchCustomers();
-      setTimeout(() => {
-        const el = customerList.querySelector(`[data-id="${r._id}"]`);
-        el && el.click();
-      }, 400);
     } catch (err) {
-      showMessage(`建立失敗：${err.message}`, 'error');
+      alert(`建立失敗：${err.message}`);
     }
   });
 }
 
 function openAddRecordForm(customer) {
   openModal(`
-    <h3>新增消費/染燙紀錄</h3>
-    <div class="input-group"><label>日期</label><input id="rec_date" type="date"></div>
-    <div class="input-group"><label>項目（以、或逗號分隔）</label><input id="rec_items" type="text" placeholder="剪髮、染髮"></div>
-    <div class="input-group"><label>消費金額</label><input id="rec_amount" type="number" min="0" step="1"></div>
-    <div class="input-group"><label>1劑</label><input id="rec_f1" type="text" placeholder="品牌/號數/比例"></div>
-    <div class="input-group"><label>2劑</label><input id="rec_f2" type="text" placeholder="品牌/號數/比例"></div>
+    <h3>新增紀錄 - ${escapeHtml(customer.name)}</h3>
+    <div class="input-group"><label>日期</label><input id="rec_date" type="date" value="${new Date().toISOString().split('T')[0]}"></div>
+    <div class="input-group"><label>項目（逗號分隔）</label><input id="rec_items" type="text" placeholder="剪髮, 染髮"></div>
+    <div class="input-group"><label>金額</label><input id="rec_amount" type="number" min="0"></div>
+    <div class="input-group"><label>1劑</label><input id="rec_f1" type="text"></div>
+    <div class="input-group"><label>2劑</label><input id="rec_f2" type="text"></div>
     <div class="input-group"><label>說明</label><textarea id="rec_notes"></textarea></div>
     <button id="rec_save" class="btn-success">新增</button>
   `);
@@ -576,7 +605,7 @@ function openAddRecordForm(customer) {
       const body = {
         customerId: customer._id,
         date: document.getElementById('rec_date').value,
-        items: itemsRaw ? itemsRaw.split(/[、,，]/).map(s => s.trim()).filter(Boolean) : [],
+        items: itemsRaw ? itemsRaw.split(/[,，、]/).map(s => s.trim()).filter(Boolean) : [],
         amount: Number(document.getElementById('rec_amount').value || 0),
         formula1: document.getElementById('rec_f1').value,
         formula2: document.getElementById('rec_f2').value,
@@ -587,13 +616,14 @@ function openAddRecordForm(customer) {
       closeModal();
       loadHairRecords(customer._id);
     } catch (err) {
-      showMessage(`新增失敗：${err.message}`, 'error');
+      alert(`新增失敗：${err.message}`);
     }
   });
 }
 
 // === 3) 服務（售價）管理 ===
 async function handleFetchServices() {
+  servicesList.innerHTML = '<p>讀取中...</p>';
   try {
     const list = await apiFetch('/api/admin/services');
     servicesList.innerHTML = list.map(s => `
@@ -607,20 +637,21 @@ async function handleFetchServices() {
           <input type="number" class="svc_price" value="${s.price}">
         </div>
         <div class="input-group">
-          <label>排序（小在前）</label>
+          <label>排序</label>
           <input type="number" class="svc_order" value="${s.display_order}">
         </div>
-        <div class="input-group">
-          <label>啟用</label>
+        <div class="input-group" style="display:flex;align-items:center;gap:10px;">
           <input type="checkbox" class="svc_active" ${s.is_active ? 'checked' : ''}>
+          <label style="margin:0;">啟用中</label>
         </div>
-        <button class="btn-success" onclick="saveService('${s._id}')">儲存</button>
+        <button class="btn-success" onclick="saveService('${s._id}')" style="margin-top:10px;">儲存變更</button>
       </div>
     `).join('');
   } catch (err) {
     showMessage(`讀取服務失敗：${err.message}`, 'error');
   }
 }
+
 window.saveService = async function(id) {
   const card = servicesList.querySelector(`.item-card[data-id="${id}"]`);
   const body = {
@@ -634,15 +665,16 @@ window.saveService = async function(id) {
     showMessage('服務已更新', 'success');
     handleFetchServices();
   } catch (err) {
-    showMessage(`更新失敗：${err.message}`, 'error');
+    alert(`更新失敗：${err.message}`);
   }
 }
+
 function openAddServiceForm() {
   openModal(`
     <h3>新增服務項目</h3>
     <div class="input-group"><label>名稱</label><input id="svc_new_name" type="text"></div>
-    <div class="input-group"><label>售價</label><input id="svc_new_price" type="number" min="0" step="1"></div>
-    <div class="input-group"><label>排序（小在前）</label><input id="svc_new_order" type="number" step="1" value="0"></div>
+    <div class="input-group"><label>售價</label><input id="svc_new_price" type="number" min="0"></div>
+    <div class="input-group"><label>排序</label><input id="svc_new_order" type="number" value="0"></div>
     <div class="input-group"><label>啟用</label><input id="svc_new_active" type="checkbox" checked></div>
     <button id="svc_new_save" class="btn-success">建立</button>
   `);
@@ -659,13 +691,13 @@ function openAddServiceForm() {
       closeModal();
       handleFetchServices();
     } catch (err) {
-      showMessage(`新增失敗：${err.message}`, 'error');
+      alert(`新增失敗：${err.message}`);
     }
   });
 }
 
-// --- 小工具：防抖 ---
-function debounce(fn, wait=300) {
+// --- 小工具：防抖 (用於搜尋) ---
+function debounce(fn, wait) {
   let t;
   return (...args) => {
     clearTimeout(t);

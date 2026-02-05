@@ -399,6 +399,11 @@ def get_my_bookings():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# 在 app.py 最上方的 Configuration 區塊加入這行
+ADMIN_LINE_USER_ID = os.environ.get("ADMIN_LINE_USER_ID")
+
+# ... (中間省略) ...
+
 @app.route("/api/bookings", methods=["POST"])
 def create_booking():
     try:
@@ -413,7 +418,7 @@ def create_booking():
     up = payload["userProfile"]
     user_id = up["userId"]
     
-    # [MODIFIED] 強制檢查：預約前必須先完成電話註冊
+    # 強制檢查：預約前必須先完成電話註冊
     user_in_db = users_col.find_one({"userId": user_id})
     if not user_in_db or not user_in_db.get("phone"):
         return jsonify({"error": "尚未完成註冊", "code": "USER_NOT_REGISTERED"}), 400
@@ -422,7 +427,7 @@ def create_booking():
     time = payload["time"]
     svc_ids = list(dict.fromkeys(payload["serviceIds"]))
 
-    # 更新 User Profile (僅更新顯示名稱與頭像，不覆蓋電話)
+    # 更新 User Profile
     try:
         users_col.update_one(
             {"userId": user_id},
@@ -447,7 +452,7 @@ def create_booking():
     start_local = datetime(y, m, d, hh, mm, tzinfo=TAIPEI)
     start_utc_naive = _to_utc_naive(start_local)
 
-    # 檢查是否重複預約 (針對同一人)
+    # 檢查是否重複預約
     dup = bookings_col.find_one({
         "userId": user_id,
         "startAt": start_utc_naive,
@@ -468,18 +473,38 @@ def create_booking():
             "updatedAt": datetime.utcnow(),
         }).inserted_id
 
-        # 推播通知
+        # --- 通知區塊 (修改這裡) ---
+        svc_names = "、".join([s.get("name","") for s in services_col.find({"_id": {"$in": svc_oids}}, {"name":1})])
+        
+        # 1. 發送給客人
         try:
-            svc_names = "、".join([s.get("name","") for s in services_col.find({"_id": {"$in": svc_oids}}, {"name":1})])
-            msg = f"【預約申請收到】\n日期：{date} {time}\n項目：{svc_names}\n\n系統將等待設計師確認，確認後會再次通知您！"
-            send_line_push(user_id, msg)
+            msg_user = f"【預約申請收到】\n日期：{date} {time}\n項目：{svc_names}\n\n系統將等待設計師確認，確認後會再次通知您！"
+            send_line_push(user_id, msg_user)
         except Exception:
             pass
+
+        # 2. 發送給設計師 (新增部分)
+        if ADMIN_LINE_USER_ID:
+            try:
+                # 這裡顯示客人的名字與電話，方便您直接辨識
+                customer_name = up.get("displayName") or "顧客"
+                customer_phone = user_in_db.get("phone") or "無電話"
+                
+                msg_admin = (
+                    f"🔔【新預約通知】\n"
+                    f"顧客：{customer_name} ({customer_phone})\n"
+                    f"時間：{date} {time}\n"
+                    f"項目：{svc_names}\n"
+                    f"請至後台確認或婉拒。"
+                )
+                send_line_push(ADMIN_LINE_USER_ID, msg_admin)
+            except Exception as e:
+                logger.error(f"Admin push failed: {e}")
 
         return jsonify({"_id": str(rid), "status": "pending"}), 201
     except PyMongoError as e:
         return jsonify({"error": str(e)}), 500
-
+    
 @app.route("/api/users/check", methods=["GET"])
 def check_user():
     user_id = request.args.get("userId")

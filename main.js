@@ -89,7 +89,6 @@
         liff.login();
       } else {
         userProfile = await liff.getProfile();
-        alert("您的 ID 是：" + userProfile.userId);
         if (displayNameSpan) displayNameSpan.textContent = userProfile.displayName;
         setMinDate();
       }

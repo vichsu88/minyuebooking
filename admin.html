@@ -230,10 +230,17 @@
         </div>
     </div>
 
+<script src="config.js"></script>
+
 <script>
 // --- 設定區 ---
-// 建議：將此 URL 提取到獨立的 config.js 檔案中，以便於環境切換
-const BACKEND_URL = "https://minyue-api.onrender.com";
+// 這裡改為從 config.js 讀取，不再寫死
+if (typeof CONFIG === 'undefined' || !CONFIG.BACKEND_BASE_URL) {
+    alert('錯誤：找不到 config.js 或設定檔內容有誤！');
+    throw new Error('CONFIG is missing');
+}
+const BACKEND_URL = CONFIG.BACKEND_BASE_URL;
+
 let adminToken = "";
 
 // --- 安全性工具：HTML 轉義 (XSS 防護) ---

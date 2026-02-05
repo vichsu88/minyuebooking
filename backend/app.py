@@ -88,6 +88,7 @@ SALON_ADDRESS = os.environ.get("SALON_ADDRESS", "")
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 CRON_SECRET = os.environ.get("CRON_SECRET")
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "5"))
+ADMIN_LINE_USER_ID = os.environ.get("ADMIN_LINE_USER_ID")
 
 # 建立索引
 try:
@@ -161,6 +162,8 @@ def _json_booking(doc: dict, service_map: dict = None) -> dict:
         "serviceNames": s_names,
         "status": doc.get("status"),
         "startAt": _iso_or_none(doc.get("startAt")),
+        # ▼▼▼ 這裡就是我們修正的重點：加入 startAtLocal ▼▼▼
+        "startAtLocal": _iso_or_none(_to_local(doc.get("startAt"))),
         "finalStartAtLocal": _iso_or_none(_to_local(doc.get("finalStartAt"))),
         "createdAt": _iso_or_none(doc.get("createdAt")),
     }
@@ -227,8 +230,10 @@ def _calendar_service():
         client_secret=GOOGLE_CLIENT_SECRET,
         scopes=["https://www.googleapis.com/auth/calendar"],
     )
-    if not creds.valid and creds.refresh_token:
+    # 強制刷新 Token
+    if not creds.valid:
         creds.refresh(Request())
+        
     return build("calendar", "v3", credentials=creds)
 
 def create_calendar_event(summary: str, description: str, start_local, end_local):
@@ -295,7 +300,7 @@ def _validate_booking_payload(payload: dict) -> Optional[str]:
 # ----------------------------------------------------------------------------- #
 @app.route("/")
 def index():
-    return "茗月髮型設計 - API 伺服器已啟動 v2.0"
+    return "茗月髮型設計 - API 伺服器已啟動 v2.0 (Fix: Token & Slots)"
 
 @app.route("/api/services", methods=["GET"])
 def get_services():
@@ -345,7 +350,6 @@ def get_busy_slots():
 
                 if 'T' not in start: # 全天事件 (YYYY-MM-DD)
                     # 全天事件視為整天忙碌
-                    # 簡單比對日期字串即可
                     if start <= date_str and end > date_str:
                         is_busy = True
                         break
@@ -398,11 +402,6 @@ def get_my_bookings():
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# 在 app.py 最上方的 Configuration 區塊加入這行
-ADMIN_LINE_USER_ID = os.environ.get("ADMIN_LINE_USER_ID")
-
-# ... (中間省略) ...
 
 @app.route("/api/bookings", methods=["POST"])
 def create_booking():
@@ -473,7 +472,7 @@ def create_booking():
             "updatedAt": datetime.utcnow(),
         }).inserted_id
 
-        # --- 通知區塊 (修改這裡) ---
+        # --- 通知區塊 ---
         svc_names = "、".join([s.get("name","") for s in services_col.find({"_id": {"$in": svc_oids}}, {"name":1})])
         
         # 1. 發送給客人
@@ -483,10 +482,10 @@ def create_booking():
         except Exception:
             pass
 
-        # 2. 發送給設計師 (新增部分)
+        # 2. 發送給設計師
         if ADMIN_LINE_USER_ID:
             try:
-                # 這裡顯示客人的名字與電話，方便您直接辨識
+                # 這裡顯示客人的名字與電話
                 customer_name = up.get("displayName") or "顧客"
                 customer_phone = user_in_db.get("phone") or "無電話"
                 
@@ -624,6 +623,7 @@ def admin_confirm_booking(bid):
             f"備註：系統自動排程"
         ]
         
+        # 建立 Google Calendar 事件
         event_id, event_link = create_calendar_event(
             summary, "\n".join(desc_lines), final_start_local, final_end_local
         )

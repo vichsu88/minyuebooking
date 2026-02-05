@@ -261,8 +261,6 @@ async function loadMyBookings() {
             return;
         }
 
-        // ★★★ 關鍵修改在這裡 ★★★
-        // 這裡會產生有 "booking-card" class 的 HTML，CSS 才會生效變紫色
         myBookingsList.innerHTML = bookings.map(b => {
             // 1. 決定狀態顏色 (紫色系)
             let statusText = '待確認';

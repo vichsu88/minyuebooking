@@ -87,7 +87,7 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 GOOGLE_REFRESH_TOKEN = os.environ.get("GOOGLE_REFRESH_TOKEN")
 GOOGLE_CALENDAR_ID = os.environ.get("GOOGLE_CALENDAR_ID", "primary")
-SALON_ADDRESS = os.environ.get("SALON_ADDRESS", "台北市文山區") # 預設地址，請確認環境變數
+SALON_ADDRESS = os.environ.get("SALON_ADDRESS", "高雄市前鎮區隆興街27號") # 預設地址，請確認環境變數
 
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN")
 CRON_SECRET = os.environ.get("CRON_SECRET")
@@ -732,8 +732,8 @@ def admin_confirm_booking(bid):
             final_start_local.strftime("%H:%M")
         )
         
-        map_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(SALON_ADDRESS)}"
-        # 預設首頁連結
+        # 修改為標準 Google Maps 搜尋連結參數
+        map_url = f"https://www.google.com/maps/search/?api=1&query={urllib.parse.quote(SALON_ADDRESS)}"        # 預設首頁連結
         home_url = "https://minyuebooking.onrender.com"
 
         flex_message = FlexSendMessage(
